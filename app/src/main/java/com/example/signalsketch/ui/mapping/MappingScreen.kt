@@ -26,16 +26,20 @@ fun MappingScreen(viewModel: MappingSessionViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     MappingScreen(
         state = uiState,
-        onStartTracking = viewModel::startTracking,
-        onStopTracking = viewModel::stopTracking
+        onStartSession = viewModel::startSession,
+        onPauseSession = viewModel::pauseSession,
+        onResumeSession = viewModel::resumeSession,
+        onResetSession = viewModel::resetSession
     )
 }
 
 @Composable
 private fun MappingScreen(
     state: MappingSessionUiState,
-    onStartTracking: () -> Unit,
-    onStopTracking: () -> Unit
+    onStartSession: () -> Unit,
+    onPauseSession: () -> Unit,
+    onResumeSession: () -> Unit,
+    onResetSession: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -48,29 +52,88 @@ private fun MappingScreen(
             style = MaterialTheme.typography.headlineMedium
         )
         Text(
-            text = "First-pass motion tracking debug view for accelerometer and gyroscope estimates.",
+            text = "Normal mapping mode records motion and Wi-Fi samples together in one live session.",
             style = MaterialTheme.typography.bodyMedium
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        SessionStatusCard(
+            state = state,
+            onStartSession = onStartSession,
+            onPauseSession = onPauseSession,
+            onResumeSession = onResumeSession,
+            onResetSession = onResetSession
+        )
+        MotionDebugCard(state = state)
+    }
+}
+
+@Composable
+private fun SessionStatusCard(
+    state: MappingSessionUiState,
+    onStartSession: () -> Unit,
+    onPauseSession: () -> Unit,
+    onResumeSession: () -> Unit,
+    onResetSession: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Button(
-                onClick = onStartTracking,
-                modifier = Modifier.weight(1f),
-                enabled = state.trackingState != MotionTrackingState.TRACKING
-            ) {
-                Text("Start Tracking")
+            Text(
+                text = "Session Status",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(text = "Lifecycle: ${state.sessionState.name}")
+            Text(text = "Session ID: ${state.sessionId ?: "Not started"}")
+            Text(text = "Wi-Fi Samples Recorded: ${state.wifiSampleCount}")
+            Text(text = "Path Samples Recorded: ${state.pathSampleCount}")
+            Text(text = "Last Wi-Fi Capture: ${state.lastWifiCaptureAtEpochMillis ?: "None"}")
+            Text(text = "Last Path Capture: ${state.lastPathCaptureAtEpochMillis ?: "None"}")
+            if (state.statusMessage != null) {
+                Text(
+                    text = state.statusMessage,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
-            OutlinedButton(
-                onClick = onStopTracking,
-                modifier = Modifier.weight(1f),
-                enabled = state.trackingState == MotionTrackingState.TRACKING
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Stop Tracking")
+                Button(
+                    onClick = onStartSession,
+                    enabled = state.canStart,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Start")
+                }
+                OutlinedButton(
+                    onClick = onPauseSession,
+                    enabled = state.canPause,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Pause")
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onResumeSession,
+                    enabled = state.canResume,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Resume")
+                }
+                OutlinedButton(
+                    onClick = onResetSession,
+                    enabled = state.canReset,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Reset")
+                }
             }
         }
-        MotionDebugCard(state = state)
     }
 }
 
@@ -97,7 +160,7 @@ private fun MotionDebugCard(state: MappingSessionUiState) {
                 state.deltaYMeters.absoluteValue < 0.0001f
             ) {
                 Text(
-                    text = "Tracking is idle. Start tracking to watch heading and movement estimates update.",
+                    text = "Tracking is idle. Start a session to capture motion and Wi-Fi together.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
