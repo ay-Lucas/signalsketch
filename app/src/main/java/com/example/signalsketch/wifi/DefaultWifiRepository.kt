@@ -8,8 +8,11 @@ import android.net.wifi.WifiManager
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +24,10 @@ class DefaultWifiRepository(
     private val permissionManager: WifiPermissionManager,
     private val externalScope: CoroutineScope? = null
 ) : WifiRepository {
+    private companion object {
+        const val SCAN_LOOP_INTERVAL_MILLIS = 5_000L
+    }
+
     private val repositoryScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val ownsScope = externalScope == null
 
@@ -31,6 +38,7 @@ class DefaultWifiRepository(
     override val scanSnapshot: StateFlow<WifiScanSnapshot> = _scanSnapshot.asStateFlow()
 
     private var receiverRegistered = false
+    private var scanLoopJob: Job? = null
 
     private val scanResultsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -71,7 +79,8 @@ class DefaultWifiRepository(
         if (!_permissionStatus.value.isGranted) {
             _scanSnapshot.value = _scanSnapshot.value.copy(
                 visibleNetworks = emptyList(),
-                isScanning = false
+                isScanning = false,
+                lastScanCompletedAtEpochMillis = System.currentTimeMillis()
             )
             return
         }
@@ -87,20 +96,38 @@ class DefaultWifiRepository(
         if (!_permissionStatus.value.isGranted) {
             return false
         }
-
-        _scanSnapshot.value = _scanSnapshot.value.copy(
-            isScanning = true,
-            lastScanStartedAtEpochMillis = System.currentTimeMillis()
-        )
-
-        val started = wifiScanner.startScan()
-        if (!started) {
-            _scanSnapshot.value = _scanSnapshot.value.copy(isScanning = false)
+        if (scanLoopJob?.isActive == true) {
+            return true
         }
-        return started
+
+        val started = triggerSingleScan()
+        if (!started) {
+            return false
+        }
+
+        scanLoopJob = repositoryScope.launch {
+            while (true) {
+                delay(SCAN_LOOP_INTERVAL_MILLIS)
+                refreshPermissions()
+                if (!_permissionStatus.value.isGranted) {
+                    _scanSnapshot.value = _scanSnapshot.value.copy(isScanning = false)
+                    break
+                }
+                triggerSingleScan()
+            }
+        }
+        return true
+    }
+
+    override fun stopScan() {
+        scanLoopJob?.cancel()
+        scanLoopJob = null
+        _scanSnapshot.value = _scanSnapshot.value.copy(isScanning = false)
     }
 
     override fun close() {
+        scanLoopJob?.cancel()
+        scanLoopJob = null
         if (receiverRegistered) {
             context.unregisterReceiver(scanResultsReceiver)
             receiverRegistered = false
@@ -123,5 +150,18 @@ class DefaultWifiRepository(
         repositoryScope.launch {
             refreshPermissions()
         }
+    }
+
+    private fun triggerSingleScan(): Boolean {
+        _scanSnapshot.value = _scanSnapshot.value.copy(
+            isScanning = true,
+            lastScanStartedAtEpochMillis = System.currentTimeMillis()
+        )
+
+        val started = wifiScanner.startScan()
+        if (!started) {
+            _scanSnapshot.value = _scanSnapshot.value.copy(isScanning = false)
+        }
+        return started
     }
 }

@@ -15,4 +15,6 @@ interface WifiRepository : Closeable {
     fun refreshScanResults()
 
     fun startScan(): Boolean
+
+    fun stopScan()
 }
