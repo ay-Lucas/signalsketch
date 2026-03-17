@@ -23,7 +23,7 @@ import com.example.signalsketch.ui.sessions.SavedSessionsScreen
 import com.example.signalsketch.ui.settings.SettingsScreen
 import com.example.signalsketch.viewmodel.ArMappingViewModel
 import com.example.signalsketch.viewmodel.HomeViewModel
-import com.example.signalsketch.viewmodel.MappingViewModel
+import com.example.signalsketch.viewmodel.MappingSessionViewModel
 import com.example.signalsketch.viewmodel.ScanViewModel
 import com.example.signalsketch.viewmodel.SessionsViewModel
 import com.example.signalsketch.viewmodel.SettingsViewModel
@@ -88,7 +88,7 @@ fun SignalSketchApp() {
                 LiveScanScreen(viewModel = viewModel<ScanViewModel>())
             }
             composable(AppDestination.Mapping.route) {
-                MappingScreen(viewModel = viewModel<MappingViewModel>())
+                MappingScreen(viewModel = viewModel<MappingSessionViewModel>())
             }
             composable(AppDestination.ArMapping.route) {
                 ArMappingScreen(viewModel = viewModel<ArMappingViewModel>())
