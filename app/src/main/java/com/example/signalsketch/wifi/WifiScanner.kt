@@ -1,3 +1,9 @@
 package com.example.signalsketch.wifi
 
-interface WifiScanner
+interface WifiScanner {
+    fun getConnectedNetwork(): ConnectedWifiNetwork?
+
+    fun getVisibleNetworks(): List<VisibleWifiNetwork>
+
+    fun startScan(): Boolean
+}
