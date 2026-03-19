@@ -21,3 +21,18 @@ data class ArAvailabilityState(
     val canStartAr: Boolean = false,
     val statusMessage: String = "Checking AR availability."
 )
+
+enum class ArSessionLifecycleState {
+    IDLE,
+    CREATED,
+    RESUMED,
+    PAUSED,
+    FAILED
+}
+
+data class ArSessionState(
+    val lifecycleState: ArSessionLifecycleState = ArSessionLifecycleState.IDLE,
+    val hasDetectedHorizontalPlane: Boolean = false,
+    val anchorCount: Int = 0,
+    val lastErrorMessage: String? = null
+)

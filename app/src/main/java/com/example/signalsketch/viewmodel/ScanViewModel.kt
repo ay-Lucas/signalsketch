@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.signalsketch.wifi.ConnectedWifiNetwork
 import com.example.signalsketch.wifi.VisibleWifiNetwork
 import com.example.signalsketch.wifi.WifiPermissionStatus
-import com.example.signalsketch.wifi.WifiRepository
 import com.example.signalsketch.wifi.WifiRepositoryFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,9 +31,9 @@ data class ScanScreenState(
 }
 
 class ScanViewModel(
-    application: Application,
-    private val wifiRepository: WifiRepository = WifiRepositoryFactory.create(application)
+    application: Application
 ) : AndroidViewModel(application) {
+    private val wifiRepository = WifiRepositoryFactory.create(application)
     private val statusMessages = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<ScanScreenState> = combine(

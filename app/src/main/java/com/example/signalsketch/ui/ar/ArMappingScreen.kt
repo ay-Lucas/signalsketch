@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,11 +19,25 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.signalsketch.ar.ArAvailabilityState
+import com.example.signalsketch.viewmodel.ArMappingUiState
 import com.example.signalsketch.viewmodel.ArMappingViewModel
+import com.google.ar.core.Config
+import com.google.ar.core.Frame
+import dev.romainguy.kotlin.math.Float3
+import io.github.sceneview.ar.ARScene
+import io.github.sceneview.ar.rememberARCameraStream
+import io.github.sceneview.ar.node.AnchorNode
+import io.github.sceneview.node.CylinderNode
+import io.github.sceneview.rememberEngine
+import io.github.sceneview.rememberMaterialLoader
+import io.github.sceneview.rememberNodes
+import io.github.sceneview.rememberOnGestureListener
 
 @Composable
 fun ArMappingScreen(viewModel: ArMappingViewModel) {
@@ -37,77 +52,203 @@ fun ArMappingScreen(viewModel: ArMappingViewModel) {
 
     ArMappingScreen(
         state = uiState,
+        activity = activity,
         onRefresh = viewModel::refresh,
         onRequestCameraPermission = { permissionLauncher.launch(android.Manifest.permission.CAMERA) },
         onRequestArInstall = {
             activity?.let(viewModel::requestArInstall)
-        }
+        },
+        onSessionCreated = viewModel::onArSessionCreated,
+        onSessionResumed = viewModel::onArSessionResumed,
+        onSessionPaused = viewModel::onArSessionPaused,
+        onSessionFailed = viewModel::onArSessionFailed,
+        onFrameUpdated = viewModel::onArFrameUpdated,
+        onTapFrame = viewModel::onArTap
     )
 }
 
 @Composable
 private fun ArMappingScreen(
-    state: ArAvailabilityState,
+    state: ArMappingUiState,
+    activity: Activity?,
+    onRefresh: () -> Unit,
+    onRequestCameraPermission: () -> Unit,
+    onRequestArInstall: () -> Unit,
+    onSessionCreated: () -> Unit,
+    onSessionResumed: () -> Unit,
+    onSessionPaused: () -> Unit,
+    onSessionFailed: (String?) -> Unit,
+    onFrameUpdated: (Frame) -> Unit,
+    onTapFrame: (Frame, android.view.MotionEvent) -> com.google.ar.core.Anchor?
+) {
+    val engine = rememberEngine()
+    val materialLoader = rememberMaterialLoader(engine)
+    val cameraStream = rememberARCameraStream(materialLoader)
+    val currentFrame = remember { mutableStateOf<Frame?>(null) }
+    val childNodes = rememberNodes()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (state.availability.canStartAr && activity != null) {
+            ARScene(
+                modifier = Modifier.fillMaxSize(),
+                planeRenderer = true,
+                cameraStream = cameraStream,
+                sessionConfiguration = { session, config ->
+                    config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
+                    config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+                    config.depthMode = if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                        Config.DepthMode.AUTOMATIC
+                    } else {
+                        Config.DepthMode.DISABLED
+                    }
+                },
+                childNodes = childNodes,
+                onSessionCreated = {
+                    onSessionCreated()
+                },
+                onSessionResumed = {
+                    onSessionResumed()
+                },
+                onSessionPaused = {
+                    onSessionPaused()
+                },
+                onSessionFailed = { exception ->
+                    onSessionFailed(exception.message)
+                },
+                onSessionUpdated = { _, frame ->
+                    currentFrame.value = frame
+                    onFrameUpdated(frame)
+                },
+                onGestureListener = rememberOnGestureListener(
+                    onSingleTapConfirmed = { motionEvent, _ ->
+                        val frame = currentFrame.value ?: return@rememberOnGestureListener
+                        val anchor = onTapFrame(frame, motionEvent) ?: return@rememberOnGestureListener
+                        childNodes += AnchorNode(
+                            engine = engine,
+                            anchor = anchor
+                        ).apply {
+                            addChildNode(
+                                CylinderNode(
+                                    engine = engine,
+                                    radius = 0.06f,
+                                    height = 0.01f,
+                                    materialInstance = materialLoader.createColorInstance(
+                                        color = Color(0xFF00C853)
+                                    )
+                                ).apply {
+                                    position = Float3(y = 0.005f)
+                                }
+                            )
+                        }
+                    }
+                )
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatusCard(
+                state = state,
+                onRefresh = onRefresh,
+                onRequestCameraPermission = onRequestCameraPermission,
+                onRequestArInstall = onRequestArInstall
+            )
+            if (state.availability.canStartAr) {
+                PlaneIndicatorCard(
+                    hasDetectedHorizontalPlane = state.hasDetectedHorizontalPlane,
+                    anchorCount = state.anchorCount
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusCard(
+    state: ArMappingUiState,
     onRefresh: () -> Unit,
     onRequestCameraPermission: () -> Unit,
     onRequestArInstall: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = "AR Mapping",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Text(
-            text = "AR is optional. The core 2D mapping flow remains available even when AR is unsupported or not installed.",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "AR Mapping",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(text = "Device Support: ${state.availability.supportState.name}")
+            Text(text = "Install / Update Status: ${state.availability.installState.name}")
+            Text(text = "Camera Permission: ${if (state.availability.hasCameraPermission) "Granted" else "Missing"}")
+            Text(text = "Can Start AR: ${if (state.availability.canStartAr) "Yes" else "No"}")
+            Text(text = "AR Session: ${state.sessionLifecycleState.name}")
+            if (state.lastErrorMessage != null) {
                 Text(
-                    text = "AR Availability",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(text = "Device Support: ${state.supportState.name}")
-                Text(text = "Install / Update Status: ${state.installState.name}")
-                Text(text = "Camera Permission: ${if (state.hasCameraPermission) "Granted" else "Missing"}")
-                Text(text = "Can Start AR: ${if (state.canStartAr) "Yes" else "No"}")
-                Text(
-                    text = state.statusMessage,
+                    text = "AR Error: ${state.lastErrorMessage}",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            } else {
+                Text(
+                    text = state.availability.statusMessage,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onRequestCameraPermission,
+                    modifier = Modifier.weight(1f),
+                    enabled = !state.availability.hasCameraPermission
                 ) {
-                    Button(
-                        onClick = onRequestCameraPermission,
-                        modifier = Modifier.weight(1f),
-                        enabled = !state.hasCameraPermission
-                    ) {
-                        Text("Grant Camera")
-                    }
-                    OutlinedButton(
-                        onClick = onRequestArInstall,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Install / Update AR")
-                    }
+                    Text("Grant Camera")
                 }
                 OutlinedButton(
-                    onClick = onRefresh,
-                    modifier = Modifier.fillMaxWidth()
+                    onClick = onRequestArInstall,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text("Refresh AR Status")
+                    Text("Install / Update AR")
                 }
             }
+            OutlinedButton(
+                onClick = onRefresh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Refresh AR Status")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaneIndicatorCard(
+    hasDetectedHorizontalPlane: Boolean,
+    anchorCount: Int
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "AR Session Debug",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = if (hasDetectedHorizontalPlane) {
+                    "Horizontal plane detected. Tap the floor to place an anchor."
+                } else {
+                    "Searching for a horizontal plane..."
+                }
+            )
+            Text(text = "Anchors Placed: $anchorCount")
         }
     }
 }

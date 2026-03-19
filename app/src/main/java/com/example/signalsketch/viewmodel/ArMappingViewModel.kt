@@ -2,26 +2,47 @@ package com.example.signalsketch.viewmodel
 
 import android.app.Activity
 import android.app.Application
+import android.view.MotionEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.signalsketch.ar.ArAvailabilityRepository
 import com.example.signalsketch.ar.ArAvailabilityRepositoryFactory
 import com.example.signalsketch.ar.ArAvailabilityState
+import com.example.signalsketch.ar.ArSessionLifecycleState
+import com.example.signalsketch.ar.ArSessionState
+import com.example.signalsketch.ar.DefaultArSessionController
+import com.google.ar.core.Anchor
+import com.google.ar.core.Frame
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
+data class ArMappingUiState(
+    val availability: ArAvailabilityState = ArAvailabilityState(),
+    val sessionLifecycleState: ArSessionLifecycleState = ArSessionLifecycleState.IDLE,
+    val hasDetectedHorizontalPlane: Boolean = false,
+    val anchorCount: Int = 0,
+    val lastErrorMessage: String? = null
+)
+
 class ArMappingViewModel(
-    application: Application,
-    private val arAvailabilityRepository: ArAvailabilityRepository =
-        ArAvailabilityRepositoryFactory.create(application)
+    application: Application
 ) : AndroidViewModel(application) {
-    val uiState: StateFlow<ArAvailabilityState> = arAvailabilityRepository.availabilityState
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = arAvailabilityRepository.availabilityState.value
+    private val arAvailabilityRepository = ArAvailabilityRepositoryFactory.create(application)
+    private val arSessionController = DefaultArSessionController()
+
+    val uiState: StateFlow<ArMappingUiState> = combine(
+        arAvailabilityRepository.availabilityState,
+        arSessionController.sessionState
+    ) { availability, session ->
+        availability.toUiState(session)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = arAvailabilityRepository.availabilityState.value.toUiState(
+            arSessionController.sessionState.value
         )
+    )
 
     fun refresh() {
         arAvailabilityRepository.refreshAvailability()
@@ -35,5 +56,43 @@ class ArMappingViewModel(
 
     fun requestArInstall(activity: Activity) {
         arAvailabilityRepository.requestInstall(activity)
+    }
+
+    fun onArSessionCreated() {
+        arSessionController.onSessionCreated()
+    }
+
+    fun onArSessionResumed() {
+        arSessionController.onSessionResumed()
+    }
+
+    fun onArSessionPaused() {
+        arSessionController.onSessionPaused()
+    }
+
+    fun onArSessionFailed(message: String?) {
+        arSessionController.onSessionFailed(message)
+    }
+
+    fun onArFrameUpdated(frame: Frame) {
+        arSessionController.onFrameUpdated(frame)
+    }
+
+    fun onArTap(frame: Frame, motionEvent: MotionEvent): Anchor? {
+        return arSessionController.placeAnchor(frame, motionEvent)
+    }
+
+    fun resetSessionState() {
+        arSessionController.reset()
+    }
+
+    private fun ArAvailabilityState.toUiState(session: ArSessionState): ArMappingUiState {
+        return ArMappingUiState(
+            availability = this,
+            sessionLifecycleState = session.lifecycleState,
+            hasDetectedHorizontalPlane = session.hasDetectedHorizontalPlane,
+            anchorCount = session.anchorCount,
+            lastErrorMessage = session.lastErrorMessage
+        )
     }
 }

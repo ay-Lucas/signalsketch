@@ -4,11 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.signalsketch.sensors.MotionEstimate
-import com.example.signalsketch.sensors.MotionTrackingRepository
 import com.example.signalsketch.sensors.MotionTrackingRepositoryFactory
 import com.example.signalsketch.sensors.MotionTrackingState
 import com.example.signalsketch.wifi.WifiPermissionStatus
-import com.example.signalsketch.wifi.WifiRepository
 import com.example.signalsketch.wifi.WifiRepositoryFactory
 import com.example.signalsketch.wifi.WifiScanSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,11 +18,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class MappingSessionViewModel(
-    application: Application,
-    private val motionTrackingRepository: MotionTrackingRepository =
-        MotionTrackingRepositoryFactory.create(application),
-    private val wifiRepository: WifiRepository = WifiRepositoryFactory.create(application)
+    application: Application
 ) : AndroidViewModel(application) {
+    private val motionTrackingRepository = MotionTrackingRepositoryFactory.create(application)
+    private val wifiRepository = WifiRepositoryFactory.create(application)
     private val sessionState = MutableStateFlow(SessionRecordingState())
 
     val uiState: StateFlow<MappingSessionUiState> = combine(
