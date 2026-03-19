@@ -226,7 +226,9 @@ class MappingSessionViewModel(
             sessionPausedAtEpochMillis = session.sessionPausedAtEpochMillis,
             lastWifiCaptureAtEpochMillis = session.lastWifiCaptureAtEpochMillis,
             lastPathCaptureAtEpochMillis = session.lastPathCaptureAtEpochMillis,
-            statusMessage = statusMessage
+            statusMessage = statusMessage,
+            pathSamples = session.pathSamples,
+            wifiSamples = session.wifiSamples
         )
     }
 

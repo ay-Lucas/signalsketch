@@ -48,7 +48,9 @@ data class MappingSessionUiState(
     val sessionPausedAtEpochMillis: Long? = null,
     val lastWifiCaptureAtEpochMillis: Long? = null,
     val lastPathCaptureAtEpochMillis: Long? = null,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val pathSamples: List<RecordedPathSample> = emptyList(),
+    val wifiSamples: List<RecordedWifiSample> = emptyList()
 ) {
     val canStart: Boolean
         get() = sessionState == RecordingSessionState.IDLE
