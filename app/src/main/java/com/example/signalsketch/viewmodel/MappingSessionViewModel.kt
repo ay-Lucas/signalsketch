@@ -3,6 +3,10 @@ package com.example.signalsketch.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.signalsketch.data.repo.RecordedPathPointPayload
+import com.example.signalsketch.data.repo.RecordedSessionPayload
+import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
+import com.example.signalsketch.data.repo.ScanSessionRepositoryFactory
 import com.example.signalsketch.position.LivePositionSample
 import com.example.signalsketch.position.PositionSourceRepositoryFactory
 import com.example.signalsketch.position.PositionSourceState
@@ -25,6 +29,7 @@ import kotlinx.coroutines.launch
 class MappingSessionViewModel(
     application: Application
 ) : AndroidViewModel(application) {
+    private val scanSessionRepository = ScanSessionRepositoryFactory.create(application)
     private val motionTrackingRepository = MotionTrackingRepositoryFactory.create(application)
     private val wifiRepository = WifiRepositoryFactory.create(application)
     private val positionSourceRepository = PositionSourceRepositoryFactory.create(application)
@@ -91,9 +96,21 @@ class MappingSessionViewModel(
     }
 
     fun resetSession() {
+        val persistedSession = sessionState.value.toRecordedSessionPayload()
         motionTrackingRepository.stopTracking()
         wifiRepository.stopScan()
-        sessionState.value = SessionRecordingState(statusMessage = "Session reset.")
+        sessionState.value = SessionRecordingState(
+            statusMessage = if (persistedSession != null) {
+                "Session saved and reset."
+            } else {
+                "Session reset."
+            }
+        )
+        if (persistedSession != null) {
+            viewModelScope.launch {
+                scanSessionRepository.saveRecordedSession(persistedSession)
+            }
+        }
     }
 
     override fun onCleared() {
@@ -160,6 +177,7 @@ class MappingSessionViewModel(
 
                     val now = System.currentTimeMillis()
                     val recordedSamples = wifiSnapshot.visibleNetworks.map { network ->
+                        val latestPathSample = current.pathSamples.lastOrNull()
                         RecordedWifiSample(
                             bssid = network.bssid,
                             ssid = network.ssid,
@@ -169,6 +187,7 @@ class MappingSessionViewModel(
                             xMeters = current.latestX,
                             yMeters = current.latestY,
                             headingDegrees = current.latestHeadingDegrees,
+                            pathSampleIndex = latestPathSample?.index,
                             recordedAtEpochMillis = now
                         )
                     }
@@ -255,6 +274,42 @@ class MappingSessionViewModel(
             recordedAtEpochMillis = System.currentTimeMillis()
         )
     }
+}
+
+private fun SessionRecordingState.toRecordedSessionPayload(): RecordedSessionPayload? {
+    val sessionId = sessionId ?: return null
+    val startedAt = sessionStartedAtEpochMillis ?: return null
+    if (pathSamples.isEmpty() && wifiSamples.isEmpty()) {
+        return null
+    }
+
+    return RecordedSessionPayload(
+        name = "Mapping Session $sessionId",
+        startedAtEpochMillis = startedAt,
+        endedAtEpochMillis = System.currentTimeMillis(),
+        notes = "Source: 2D mapping",
+        pathPoints = pathSamples.map { sample ->
+            RecordedPathPointPayload(
+                xMeters = sample.xMeters,
+                yMeters = sample.yMeters,
+                headingDegrees = sample.headingDegrees,
+                recordedAtEpochMillis = sample.recordedAtEpochMillis
+            )
+        },
+        wifiSamples = wifiSamples.map { sample ->
+            RecordedWifiSamplePayload(
+                ssid = sample.ssid,
+                bssid = sample.bssid,
+                rssiDbm = sample.rssiDbm,
+                frequencyMhz = sample.frequencyMhz,
+                sampledAtEpochMillis = sample.recordedAtEpochMillis,
+                xMeters = sample.xMeters,
+                yMeters = sample.yMeters,
+                headingDegrees = sample.headingDegrees,
+                pathPointIndex = sample.pathSampleIndex
+            )
+        }
+    )
 }
 
 private data class SessionRecordingState(

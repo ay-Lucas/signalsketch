@@ -10,6 +10,10 @@ import com.example.signalsketch.ar.ArAvailabilityState
 import com.example.signalsketch.ar.ArSessionLifecycleState
 import com.example.signalsketch.ar.ArSessionState
 import com.example.signalsketch.ar.DefaultArSessionController
+import com.example.signalsketch.data.repo.RecordedPathPointPayload
+import com.example.signalsketch.data.repo.RecordedSessionPayload
+import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
+import com.example.signalsketch.data.repo.ScanSessionRepositoryFactory
 import com.example.signalsketch.position.LivePositionSample
 import com.example.signalsketch.position.PositionSourceRepositoryFactory
 import com.example.signalsketch.position.PositionSourceState
@@ -70,6 +74,7 @@ class ArMappingViewModel(
 ) : AndroidViewModel(application) {
     private val arAvailabilityRepository = ArAvailabilityRepositoryFactory.create(application)
     private val arSessionController = DefaultArSessionController()
+    private val scanSessionRepository = ScanSessionRepositoryFactory.create(application)
     private val positionSourceRepository = PositionSourceRepositoryFactory.create(application)
     private val motionTrackingRepository = MotionTrackingRepositoryFactory.create(application)
     private val wifiRepository = WifiRepositoryFactory.create(application)
@@ -97,6 +102,7 @@ class ArMappingViewModel(
         wifiRepository.refreshConnectedNetwork()
         wifiRepository.refreshScanResults()
         observeMotionSamples()
+        observePositionSamples()
         observeWifiSamples()
     }
 
@@ -134,11 +140,21 @@ class ArMappingViewModel(
     }
 
     fun resetSession() {
+        val persistedSession = sessionState.value.toRecordedSessionPayload()
         motionTrackingRepository.stopTracking()
         wifiRepository.stopScan()
         sessionState.value = ArRecordingSessionState(
-            statusMessage = "AR mapping session reset."
+            statusMessage = if (persistedSession != null) {
+                "AR mapping session saved and reset."
+            } else {
+                "AR mapping session reset."
+            }
         )
+        if (persistedSession != null) {
+            viewModelScope.launch {
+                scanSessionRepository.saveRecordedSession(persistedSession)
+            }
+        }
     }
 
     fun refresh() {
@@ -235,11 +251,28 @@ class ArMappingViewModel(
                     }
 
                     val preferredSample = positionSourceState.preferredSample ?: return@update current
+                    val latestPathSample = current.pathSamples.lastOrNull()
                     val strongestSignal = wifiSnapshot.visibleNetworks.maxByOrNull { it.rssiDbm }
                     val marker = strongestSignal?.toMarker(preferredSample, completedAt)
+                    val recordedAt = System.currentTimeMillis()
+                    val recordedWifiSamples = wifiSnapshot.visibleNetworks.map { network ->
+                        RecordedWifiSample(
+                            bssid = network.bssid,
+                            ssid = network.ssid,
+                            rssiDbm = network.rssiDbm,
+                            frequencyMhz = network.frequencyMhz,
+                            timestampMicros = network.timestampMicros,
+                            xMeters = preferredSample.xMeters,
+                            yMeters = preferredSample.yMeters,
+                            headingDegrees = preferredSample.headingDegrees,
+                            pathSampleIndex = latestPathSample?.index,
+                            recordedAtEpochMillis = recordedAt
+                        )
+                    }
 
                     current.copy(
                         wifiSampleCount = current.wifiSampleCount + wifiSnapshot.visibleNetworks.size,
+                        wifiSamples = current.wifiSamples + recordedWifiSamples,
                         sampleMarkers = current.sampleMarkers + listOfNotNull(marker),
                         lastRecordedWifiSnapshotAtEpochMillis = completedAt,
                         statusMessage = if (positionSourceState.preferredSourceType == PositionSourceType.AR) {
@@ -247,6 +280,34 @@ class ArMappingViewModel(
                         } else {
                             "Recorded Wi-Fi samples using sensor fallback."
                         }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun observePositionSamples() {
+        viewModelScope.launch {
+            positionSourceRepository.positionSourceState.collect { positionSourceState ->
+                val sample = positionSourceState.preferredSample ?: return@collect
+                sessionState.update { current ->
+                    if (current.lifecycleState != RecordingSessionState.ACTIVE) {
+                        return@update current
+                    }
+                    if (sample.sequence <= current.lastRecordedPositionSequence) {
+                        return@update current
+                    }
+
+                    current.copy(
+                        pathSamples = current.pathSamples + RecordedPathSample(
+                            index = current.pathSamples.size,
+                            xMeters = sample.xMeters,
+                            yMeters = sample.yMeters,
+                            headingDegrees = sample.headingDegrees,
+                            sensorSampleCount = current.pathSamples.size + 1,
+                            recordedAtEpochMillis = sample.recordedAtEpochMillis
+                        ),
+                        lastRecordedPositionSequence = sample.sequence
                     )
                 }
             }
@@ -336,7 +397,45 @@ private data class ArRecordingSessionState(
     val lifecycleState: RecordingSessionState = RecordingSessionState.IDLE,
     val sessionId: Long? = null,
     val wifiSampleCount: Int = 0,
+    val pathSamples: List<RecordedPathSample> = emptyList(),
+    val wifiSamples: List<RecordedWifiSample> = emptyList(),
     val sampleMarkers: List<ArSampleMarkerUiState> = emptyList(),
     val lastRecordedWifiSnapshotAtEpochMillis: Long = 0,
+    val lastRecordedPositionSequence: Long = 0,
     val statusMessage: String? = null
 )
+
+private fun ArRecordingSessionState.toRecordedSessionPayload(): RecordedSessionPayload? {
+    val sessionId = sessionId ?: return null
+    if (pathSamples.isEmpty() && wifiSamples.isEmpty()) {
+        return null
+    }
+
+    return RecordedSessionPayload(
+        name = "AR Mapping Session $sessionId",
+        startedAtEpochMillis = sessionId,
+        endedAtEpochMillis = System.currentTimeMillis(),
+        notes = "Source: AR mapping",
+        pathPoints = pathSamples.map { sample ->
+            RecordedPathPointPayload(
+                xMeters = sample.xMeters,
+                yMeters = sample.yMeters,
+                headingDegrees = sample.headingDegrees,
+                recordedAtEpochMillis = sample.recordedAtEpochMillis
+            )
+        },
+        wifiSamples = wifiSamples.map { sample ->
+            RecordedWifiSamplePayload(
+                ssid = sample.ssid,
+                bssid = sample.bssid,
+                rssiDbm = sample.rssiDbm,
+                frequencyMhz = sample.frequencyMhz,
+                sampledAtEpochMillis = sample.recordedAtEpochMillis,
+                xMeters = sample.xMeters,
+                yMeters = sample.yMeters,
+                headingDegrees = sample.headingDegrees,
+                pathPointIndex = sample.pathSampleIndex
+            )
+        }
+    )
+}

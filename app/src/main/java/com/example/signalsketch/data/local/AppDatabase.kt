@@ -1,5 +1,6 @@
 package com.example.signalsketch.data.local
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 
@@ -9,7 +10,10 @@ import androidx.room.RoomDatabase
         WifiSampleEntity::class,
         PathPointEntity::class
     ],
-    version = 1,
+    version = 2,
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2)
+    ],
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

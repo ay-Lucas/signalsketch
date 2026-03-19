@@ -28,6 +28,7 @@ data class RecordedWifiSample(
     val xMeters: Float,
     val yMeters: Float,
     val headingDegrees: Float,
+    val pathSampleIndex: Int?,
     val recordedAtEpochMillis: Long
 )
 

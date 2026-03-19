@@ -28,4 +28,6 @@ interface ScanSessionRepository {
     suspend fun addPathPoint(point: PathPointEntity): Long
 
     suspend fun addPathPoints(points: List<PathPointEntity>)
+
+    suspend fun saveRecordedSession(session: RecordedSessionPayload): Long
 }

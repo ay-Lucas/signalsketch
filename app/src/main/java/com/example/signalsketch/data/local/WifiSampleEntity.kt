@@ -34,6 +34,12 @@ data class WifiSampleEntity(
     val frequencyMhz: Int?,
     @ColumnInfo(name = "sampled_at_epoch_millis")
     val sampledAtEpochMillis: Long,
+    @ColumnInfo(name = "x_meters")
+    val xMeters: Float? = null,
+    @ColumnInfo(name = "y_meters")
+    val yMeters: Float? = null,
+    @ColumnInfo(name = "heading_degrees")
+    val headingDegrees: Float? = null,
     @ColumnInfo(name = "path_point_id")
     val pathPointId: Long? = null
 )

@@ -15,5 +15,5 @@ interface PathPointDao {
     suspend fun insertPoint(point: PathPointEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertPoints(points: List<PathPointEntity>)
+    suspend fun insertPoints(points: List<PathPointEntity>): List<Long>
 }
