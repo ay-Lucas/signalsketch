@@ -171,7 +171,7 @@ private fun MapCanvasCard(state: MappingSessionUiState) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Path is drawn as connected points. Wi-Fi samples are colored by RSSI bucket.",
+                text = "A simple grid heatmap is derived from Wi-Fi samples, while the original path and sample points stay visible.",
                 style = MaterialTheme.typography.bodySmall
             )
             Box(
@@ -209,6 +209,14 @@ private fun MapCanvasCard(state: MappingSessionUiState) {
                         end = Offset(size.width, renderModel.center.y),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
                     )
+
+                    renderModel.heatmapCells.forEach { cell ->
+                        drawRect(
+                            color = renderer.heatmapColorFor(cell.bucket),
+                            topLeft = cell.rect.topLeft,
+                            size = cell.rect.size
+                        )
+                    }
 
                     renderModel.path.zipWithNext { start, end ->
                         drawLine(
