@@ -16,6 +16,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.position.PositionSourceType
+import com.example.signalsketch.position.TrackingQuality
 import com.example.signalsketch.sensors.MotionTrackingState
 import com.example.signalsketch.viewmodel.MappingSessionUiState
 import com.example.signalsketch.viewmodel.MappingSessionViewModel
@@ -87,6 +89,8 @@ private fun SessionStatusCard(
             Text(text = "Session ID: ${state.sessionId ?: "Not started"}")
             Text(text = "Wi-Fi Samples Recorded: ${state.wifiSampleCount}")
             Text(text = "Path Samples Recorded: ${state.pathSampleCount}")
+            Text(text = "Preferred Position Source: ${state.positionSourceType.name}")
+            Text(text = "Tracking Quality: ${state.trackingQuality.name}")
             Text(text = "Last Wi-Fi Capture: ${state.lastWifiCaptureAtEpochMillis ?: "None"}")
             Text(text = "Last Path Capture: ${state.lastPathCaptureAtEpochMillis ?: "None"}")
             if (state.statusMessage != null) {
@@ -154,6 +158,7 @@ private fun MotionDebugCard(state: MappingSessionUiState) {
                 text = "Movement Delta: x=${state.deltaXMeters.format(3)} m, y=${state.deltaYMeters.format(3)} m"
             )
             Text(text = "Sensor Sample Count: ${state.sensorSampleCount}")
+            Text(text = "Position Status: ${state.trackingStatus}")
             if (state.trackingState == MotionTrackingState.IDLE &&
                 state.sensorSampleCount == 0 &&
                 state.deltaXMeters.absoluteValue < 0.0001f &&
@@ -167,6 +172,14 @@ private fun MotionDebugCard(state: MappingSessionUiState) {
             if (state.trackingState == MotionTrackingState.SENSOR_UNAVAILABLE) {
                 Text(
                     text = "This device does not expose both required motion sensors.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (state.positionSourceType == PositionSourceType.AR &&
+                state.trackingQuality == TrackingQuality.GOOD
+            ) {
+                Text(
+                    text = "AR is providing the preferred live position.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }

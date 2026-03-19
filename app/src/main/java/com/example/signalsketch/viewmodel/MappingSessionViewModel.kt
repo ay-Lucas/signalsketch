@@ -3,6 +3,11 @@ package com.example.signalsketch.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.signalsketch.position.LivePositionSample
+import com.example.signalsketch.position.PositionSourceRepositoryFactory
+import com.example.signalsketch.position.PositionSourceState
+import com.example.signalsketch.position.PositionSourceType
+import com.example.signalsketch.position.TrackingQuality
 import com.example.signalsketch.sensors.MotionEstimate
 import com.example.signalsketch.sensors.MotionTrackingRepositoryFactory
 import com.example.signalsketch.sensors.MotionTrackingState
@@ -22,15 +27,17 @@ class MappingSessionViewModel(
 ) : AndroidViewModel(application) {
     private val motionTrackingRepository = MotionTrackingRepositoryFactory.create(application)
     private val wifiRepository = WifiRepositoryFactory.create(application)
+    private val positionSourceRepository = PositionSourceRepositoryFactory.create(application)
     private val sessionState = MutableStateFlow(SessionRecordingState())
 
     val uiState: StateFlow<MappingSessionUiState> = combine(
         sessionState,
         motionTrackingRepository.motionEstimate,
         wifiRepository.scanSnapshot,
-        wifiRepository.permissionStatus
-    ) { session, motionEstimate, wifiSnapshot, wifiPermission ->
-        buildUiState(session, motionEstimate, wifiSnapshot, wifiPermission)
+        wifiRepository.permissionStatus,
+        positionSourceRepository.positionSourceState
+    ) { session, motionEstimate, wifiSnapshot, wifiPermission, positionSourceState ->
+        buildUiState(session, motionEstimate, wifiSnapshot, wifiPermission, positionSourceState)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -43,6 +50,7 @@ class MappingSessionViewModel(
         wifiRepository.refreshScanResults()
         observeMotionSamples()
         observeWifiSamples()
+        observePositionSamples()
     }
 
     fun startSession() {
@@ -98,24 +106,39 @@ class MappingSessionViewModel(
         viewModelScope.launch {
             motionTrackingRepository.motionEstimate.collect { motionEstimate ->
                 sessionState.update { current ->
+                    current.copy(lastSensorSampleCount = motionEstimate.sensorSampleCount)
+                }
+                positionSourceRepository.updateSensorPosition(
+                    motionEstimate.toSensorPositionSample()
+                )
+            }
+        }
+    }
+
+    private fun observePositionSamples() {
+        viewModelScope.launch {
+            positionSourceRepository.positionSourceState.collect { positionSourceState ->
+                val sample = positionSourceState.preferredSample ?: return@collect
+                sessionState.update { current ->
                     if (current.lifecycleState != RecordingSessionState.ACTIVE) {
                         return@update current
                     }
-                    if (motionEstimate.sensorSampleCount <= current.lastRecordedMotionSampleCount) {
+                    if (sample.sequence <= current.lastRecordedPositionSequence) {
                         return@update current
                     }
 
                     current.copy(
                         pathSamples = current.pathSamples + RecordedPathSample(
                             index = current.pathSamples.size,
-                            xMeters = motionEstimate.movementDelta.deltaXMeters,
-                            yMeters = motionEstimate.movementDelta.deltaYMeters,
-                            headingDegrees = motionEstimate.headingDegrees,
-                            sensorSampleCount = motionEstimate.sensorSampleCount,
-                            recordedAtEpochMillis = System.currentTimeMillis()
+                            xMeters = sample.xMeters,
+                            yMeters = sample.yMeters,
+                            headingDegrees = sample.headingDegrees,
+                            sensorSampleCount = current.lastSensorSampleCount,
+                            recordedAtEpochMillis = sample.recordedAtEpochMillis
                         ),
-                        lastRecordedMotionSampleCount = motionEstimate.sensorSampleCount,
-                        lastPathCaptureAtEpochMillis = System.currentTimeMillis()
+                        lastRecordedPositionSequence = sample.sequence,
+                        lastPositionSourceType = sample.sourceType,
+                        lastPathCaptureAtEpochMillis = sample.recordedAtEpochMillis
                     )
                 }
             }
@@ -164,7 +187,8 @@ class MappingSessionViewModel(
         session: SessionRecordingState,
         motionEstimate: MotionEstimate,
         wifiSnapshot: WifiScanSnapshot,
-        wifiPermission: WifiPermissionStatus
+        wifiPermission: WifiPermissionStatus,
+        positionSourceState: PositionSourceState
     ): MappingSessionUiState {
         val statusMessage = when {
             session.statusMessage != null -> session.statusMessage
@@ -172,21 +196,28 @@ class MappingSessionViewModel(
                 "Recording is active, but Wi-Fi permissions are incomplete."
             }
             session.lifecycleState == RecordingSessionState.ACTIVE &&
-                motionEstimate.trackingState == MotionTrackingState.SENSOR_UNAVAILABLE -> {
-                "Required motion sensors are unavailable on this device."
+                motionEstimate.trackingState == MotionTrackingState.SENSOR_UNAVAILABLE &&
+                positionSourceState.preferredSourceType != PositionSourceType.AR -> {
+                "Required motion sensors are unavailable and AR is not providing position."
             }
             session.lifecycleState == RecordingSessionState.ACTIVE && wifiSnapshot.isScanning -> {
-                "Recording live Wi-Fi and motion samples."
+                "Recording live Wi-Fi and position samples."
             }
-            else -> null
+            else -> positionSourceState.status
         }
 
         return MappingSessionUiState(
             sessionState = session.lifecycleState,
             sessionId = session.sessionId,
-            headingDegrees = motionEstimate.headingDegrees,
-            deltaXMeters = motionEstimate.movementDelta.deltaXMeters,
-            deltaYMeters = motionEstimate.movementDelta.deltaYMeters,
+            headingDegrees = positionSourceState.preferredSample?.headingDegrees
+                ?: motionEstimate.headingDegrees,
+            deltaXMeters = positionSourceState.preferredSample?.xMeters
+                ?: motionEstimate.movementDelta.deltaXMeters,
+            deltaYMeters = positionSourceState.preferredSample?.yMeters
+                ?: motionEstimate.movementDelta.deltaYMeters,
+            positionSourceType = positionSourceState.preferredSourceType,
+            trackingQuality = positionSourceState.trackingQuality,
+            trackingStatus = positionSourceState.status,
             sensorSampleCount = motionEstimate.sensorSampleCount,
             trackingState = motionEstimate.trackingState,
             wifiSampleCount = session.wifiSamples.size,
@@ -198,6 +229,30 @@ class MappingSessionViewModel(
             statusMessage = statusMessage
         )
     }
+
+    private fun MotionEstimate.toSensorPositionSample(): LivePositionSample {
+        val quality = when (trackingState) {
+            MotionTrackingState.TRACKING -> TrackingQuality.LIMITED
+            MotionTrackingState.IDLE -> TrackingQuality.UNAVAILABLE
+            MotionTrackingState.SENSOR_UNAVAILABLE -> TrackingQuality.UNAVAILABLE
+        }
+        val status = when (trackingState) {
+            MotionTrackingState.TRACKING -> "Sensor-based position tracking is active."
+            MotionTrackingState.IDLE -> "Sensor-based position tracking is idle."
+            MotionTrackingState.SENSOR_UNAVAILABLE -> "Sensor-based tracking is unavailable."
+        }
+
+        return LivePositionSample(
+            sourceType = PositionSourceType.SENSORS,
+            xMeters = movementDelta.deltaXMeters,
+            yMeters = movementDelta.deltaYMeters,
+            headingDegrees = headingDegrees,
+            trackingQuality = quality,
+            status = status,
+            sequence = sensorSampleCount.toLong(),
+            recordedAtEpochMillis = System.currentTimeMillis()
+        )
+    }
 }
 
 private data class SessionRecordingState(
@@ -207,8 +262,10 @@ private data class SessionRecordingState(
     val sessionPausedAtEpochMillis: Long? = null,
     val pathSamples: List<RecordedPathSample> = emptyList(),
     val wifiSamples: List<RecordedWifiSample> = emptyList(),
-    val lastRecordedMotionSampleCount: Int = 0,
+    val lastRecordedPositionSequence: Long = 0,
     val lastRecordedWifiSnapshotAtEpochMillis: Long = 0,
+    val lastSensorSampleCount: Int = 0,
+    val lastPositionSourceType: PositionSourceType = PositionSourceType.NONE,
     val lastWifiCaptureAtEpochMillis: Long? = null,
     val lastPathCaptureAtEpochMillis: Long? = null,
     val statusMessage: String? = null

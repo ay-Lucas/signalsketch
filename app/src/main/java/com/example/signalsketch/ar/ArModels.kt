@@ -1,5 +1,7 @@
 package com.example.signalsketch.ar
 
+import com.example.signalsketch.position.TrackingQuality
+
 enum class ArSupportState {
     CHECKING,
     SUPPORTED,
@@ -34,5 +36,10 @@ data class ArSessionState(
     val lifecycleState: ArSessionLifecycleState = ArSessionLifecycleState.IDLE,
     val hasDetectedHorizontalPlane: Boolean = false,
     val anchorCount: Int = 0,
+    val xMeters: Float? = null,
+    val yMeters: Float? = null,
+    val headingDegrees: Float? = null,
+    val trackingQuality: TrackingQuality = TrackingQuality.UNAVAILABLE,
+    val trackingStatus: String = "AR session inactive.",
     val lastErrorMessage: String? = null
 )

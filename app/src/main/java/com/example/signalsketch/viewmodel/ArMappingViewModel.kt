@@ -10,6 +10,9 @@ import com.example.signalsketch.ar.ArAvailabilityState
 import com.example.signalsketch.ar.ArSessionLifecycleState
 import com.example.signalsketch.ar.ArSessionState
 import com.example.signalsketch.ar.DefaultArSessionController
+import com.example.signalsketch.position.LivePositionSample
+import com.example.signalsketch.position.PositionSourceRepositoryFactory
+import com.example.signalsketch.position.PositionSourceType
 import com.google.ar.core.Anchor
 import com.google.ar.core.Frame
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,6 +33,7 @@ class ArMappingViewModel(
 ) : AndroidViewModel(application) {
     private val arAvailabilityRepository = ArAvailabilityRepositoryFactory.create(application)
     private val arSessionController = DefaultArSessionController()
+    private val positionSourceRepository = PositionSourceRepositoryFactory.create(application)
 
     val uiState: StateFlow<ArMappingUiState> = combine(
         arAvailabilityRepository.availabilityState,
@@ -68,14 +72,32 @@ class ArMappingViewModel(
 
     fun onArSessionPaused() {
         arSessionController.onSessionPaused()
+        positionSourceRepository.clearArPosition("AR session paused.")
     }
 
     fun onArSessionFailed(message: String?) {
         arSessionController.onSessionFailed(message)
+        positionSourceRepository.clearArPosition(message ?: "AR session failed.")
     }
 
     fun onArFrameUpdated(frame: Frame) {
         arSessionController.onFrameUpdated(frame)
+        val sessionState = arSessionController.sessionState.value
+        val x = sessionState.xMeters ?: return
+        val y = sessionState.yMeters ?: return
+        val headingDegrees = sessionState.headingDegrees ?: return
+        positionSourceRepository.updateArPosition(
+            LivePositionSample(
+                sourceType = PositionSourceType.AR,
+                xMeters = x,
+                yMeters = y,
+                headingDegrees = headingDegrees,
+                trackingQuality = sessionState.trackingQuality,
+                status = sessionState.trackingStatus,
+                sequence = frame.timestamp,
+                recordedAtEpochMillis = System.currentTimeMillis()
+            )
+        )
     }
 
     fun onArTap(frame: Frame, motionEvent: MotionEvent): Anchor? {

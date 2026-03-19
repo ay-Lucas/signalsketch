@@ -1,5 +1,7 @@
 package com.example.signalsketch.viewmodel
 
+import com.example.signalsketch.position.PositionSourceType
+import com.example.signalsketch.position.TrackingQuality
 import com.example.signalsketch.sensors.MotionTrackingState
 
 enum class RecordingSessionState {
@@ -35,6 +37,9 @@ data class MappingSessionUiState(
     val headingDegrees: Float = 0f,
     val deltaXMeters: Float = 0f,
     val deltaYMeters: Float = 0f,
+    val positionSourceType: PositionSourceType = PositionSourceType.NONE,
+    val trackingQuality: TrackingQuality = TrackingQuality.UNAVAILABLE,
+    val trackingStatus: String = "No position source active.",
     val sensorSampleCount: Int = 0,
     val trackingState: MotionTrackingState = MotionTrackingState.IDLE,
     val wifiSampleCount: Int = 0,
