@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,14 +26,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.position.PositionSourceType
+import com.example.signalsketch.position.TrackingQuality
 import com.example.signalsketch.viewmodel.ArMappingUiState
 import com.example.signalsketch.viewmodel.ArMappingViewModel
 import com.google.ar.core.Config
 import com.google.ar.core.Frame
 import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.ar.ARScene
-import io.github.sceneview.ar.rememberARCameraStream
 import io.github.sceneview.ar.node.AnchorNode
+import io.github.sceneview.ar.rememberARCameraStream
+import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.rememberEngine
 import io.github.sceneview.rememberMaterialLoader
@@ -63,7 +67,11 @@ fun ArMappingScreen(viewModel: ArMappingViewModel) {
         onSessionPaused = viewModel::onArSessionPaused,
         onSessionFailed = viewModel::onArSessionFailed,
         onFrameUpdated = viewModel::onArFrameUpdated,
-        onTapFrame = viewModel::onArTap
+        onTapFrame = viewModel::onArTap,
+        onStartSession = viewModel::startSession,
+        onPauseSession = viewModel::pauseSession,
+        onResumeSession = viewModel::resumeSession,
+        onResetSession = viewModel::resetSession
     )
 }
 
@@ -79,13 +87,31 @@ private fun ArMappingScreen(
     onSessionPaused: () -> Unit,
     onSessionFailed: (String?) -> Unit,
     onFrameUpdated: (Frame) -> Unit,
-    onTapFrame: (Frame, android.view.MotionEvent) -> com.google.ar.core.Anchor?
+    onTapFrame: (Frame, android.view.MotionEvent) -> com.google.ar.core.Anchor?,
+    onStartSession: () -> Unit,
+    onPauseSession: () -> Unit,
+    onResumeSession: () -> Unit,
+    onResetSession: () -> Unit
 ) {
     val engine = rememberEngine()
     val materialLoader = rememberMaterialLoader(engine)
     val cameraStream = rememberARCameraStream(materialLoader)
     val currentFrame = remember { mutableStateOf<Frame?>(null) }
-    val childNodes = rememberNodes()
+    val anchorNodes = rememberNodes()
+    val wifiMarkerNodes = rememberNodes()
+
+    LaunchedEffect(state.liveSampleMarkers) {
+        wifiMarkerNodes.clear()
+        state.liveSampleMarkers.forEach { marker ->
+            wifiMarkerNodes += CubeNode(
+                engine = engine,
+                size = Float3(0.08f, 0.08f, 0.08f),
+                materialInstance = materialLoader.createColorInstance(marker.colorArgb)
+            ).apply {
+                position = Float3(marker.xMeters, 0.04f, marker.yMeters)
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.availability.canStartAr && activity != null) {
@@ -102,19 +128,11 @@ private fun ArMappingScreen(
                         Config.DepthMode.DISABLED
                     }
                 },
-                childNodes = childNodes,
-                onSessionCreated = {
-                    onSessionCreated()
-                },
-                onSessionResumed = {
-                    onSessionResumed()
-                },
-                onSessionPaused = {
-                    onSessionPaused()
-                },
-                onSessionFailed = { exception ->
-                    onSessionFailed(exception.message)
-                },
+                childNodes = anchorNodes + wifiMarkerNodes,
+                onSessionCreated = { onSessionCreated() },
+                onSessionResumed = { onSessionResumed() },
+                onSessionPaused = { onSessionPaused() },
+                onSessionFailed = { exception -> onSessionFailed(exception.message) },
                 onSessionUpdated = { _, frame ->
                     currentFrame.value = frame
                     onFrameUpdated(frame)
@@ -123,7 +141,7 @@ private fun ArMappingScreen(
                     onSingleTapConfirmed = { motionEvent, _ ->
                         val frame = currentFrame.value ?: return@rememberOnGestureListener
                         val anchor = onTapFrame(frame, motionEvent) ?: return@rememberOnGestureListener
-                        childNodes += AnchorNode(
+                        anchorNodes += AnchorNode(
                             engine = engine,
                             anchor = anchor
                         ).apply {
@@ -155,12 +173,17 @@ private fun ArMappingScreen(
                 state = state,
                 onRefresh = onRefresh,
                 onRequestCameraPermission = onRequestCameraPermission,
-                onRequestArInstall = onRequestArInstall
+                onRequestArInstall = onRequestArInstall,
+                onStartSession = onStartSession,
+                onPauseSession = onPauseSession,
+                onResumeSession = onResumeSession,
+                onResetSession = onResetSession
             )
             if (state.availability.canStartAr) {
                 PlaneIndicatorCard(
                     hasDetectedHorizontalPlane = state.hasDetectedHorizontalPlane,
-                    anchorCount = state.anchorCount
+                    anchorCount = state.anchorCount,
+                    wifiSampleCount = state.wifiSampleCount
                 )
             }
         }
@@ -172,7 +195,11 @@ private fun StatusCard(
     state: ArMappingUiState,
     onRefresh: () -> Unit,
     onRequestCameraPermission: () -> Unit,
-    onRequestArInstall: () -> Unit
+    onRequestArInstall: () -> Unit,
+    onStartSession: () -> Unit,
+    onPauseSession: () -> Unit,
+    onResumeSession: () -> Unit,
+    onResetSession: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -188,6 +215,9 @@ private fun StatusCard(
             Text(text = "Camera Permission: ${if (state.availability.hasCameraPermission) "Granted" else "Missing"}")
             Text(text = "Can Start AR: ${if (state.availability.canStartAr) "Yes" else "No"}")
             Text(text = "AR Session: ${state.sessionLifecycleState.name}")
+            Text(text = "Recording Session: ${state.recordingSessionState.name}")
+            Text(text = "Position Source: ${state.preferredPositionSource.name}")
+            Text(text = "Tracking Quality: ${state.trackingQuality.name}")
             if (state.lastErrorMessage != null) {
                 Text(
                     text = "AR Error: ${state.lastErrorMessage}",
@@ -195,7 +225,21 @@ private fun StatusCard(
                 )
             } else {
                 Text(
-                    text = state.availability.statusMessage,
+                    text = state.statusMessage ?: state.availability.statusMessage,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (state.trackingQuality == TrackingQuality.LIMITED) {
+                Text(
+                    text = "Move slowly and keep the floor and nearby textured surfaces in view.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (state.trackingQuality == TrackingQuality.UNAVAILABLE &&
+                state.preferredPositionSource != PositionSourceType.SENSORS
+            ) {
+                Text(
+                    text = "Tracking is lost. Repoint at the floor and improve lighting.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -223,6 +267,44 @@ private fun StatusCard(
             ) {
                 Text("Refresh AR Status")
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onStartSession,
+                    enabled = state.canStartSession && state.availability.canStartAr,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Start")
+                }
+                OutlinedButton(
+                    onClick = onPauseSession,
+                    enabled = state.canPauseSession,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Pause")
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onResumeSession,
+                    enabled = state.canResumeSession,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Resume")
+                }
+                OutlinedButton(
+                    onClick = onResetSession,
+                    enabled = state.canResetSession,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Reset")
+                }
+            }
         }
     }
 }
@@ -230,7 +312,8 @@ private fun StatusCard(
 @Composable
 private fun PlaneIndicatorCard(
     hasDetectedHorizontalPlane: Boolean,
-    anchorCount: Int
+    anchorCount: Int,
+    wifiSampleCount: Int
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -249,6 +332,8 @@ private fun PlaneIndicatorCard(
                 }
             )
             Text(text = "Anchors Placed: $anchorCount")
+            Text(text = "Wi-Fi Samples Captured: $wifiSampleCount")
+            Text(text = "Marker Colors: green=strong, yellow=medium, red=weak")
         }
     }
 }
