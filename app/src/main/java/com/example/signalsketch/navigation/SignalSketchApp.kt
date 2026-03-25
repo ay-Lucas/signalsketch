@@ -95,7 +95,14 @@ fun SignalSketchApp() {
                 MappingScreen(viewModel = viewModel<MappingSessionViewModel>())
             }
             composable(AppDestination.ArMapping.route) {
-                ArMappingScreen(viewModel = viewModel<ArMappingViewModel>())
+                ArMappingScreen(
+                    viewModel = viewModel<ArMappingViewModel>(),
+                    onOpenStandardMapping = {
+                        navController.navigate(AppDestination.Mapping.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
             }
             composable(AppDestination.SavedSessions.route) {
                 SavedSessionsScreen(

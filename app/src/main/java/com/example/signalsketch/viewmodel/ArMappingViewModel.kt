@@ -7,8 +7,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.signalsketch.ar.ArAvailabilityRepositoryFactory
 import com.example.signalsketch.ar.ArAvailabilityState
+import com.example.signalsketch.ar.ArInstallState
 import com.example.signalsketch.ar.ArSessionLifecycleState
 import com.example.signalsketch.ar.ArSessionState
+import com.example.signalsketch.ar.ArSupportState
 import com.example.signalsketch.ar.DefaultArSessionController
 import com.example.signalsketch.data.repo.RecordedPathPointPayload
 import com.example.signalsketch.data.repo.RecordedSessionPayload
@@ -55,7 +57,8 @@ data class ArMappingUiState(
     val preferredPositionSource: PositionSourceType = PositionSourceType.NONE,
     val trackingQuality: TrackingQuality = TrackingQuality.UNAVAILABLE,
     val trackingStatus: String = "AR session inactive.",
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val fallbackMessage: String? = null
 ) {
     val canStartSession: Boolean
         get() = recordingSessionState == RecordingSessionState.IDLE
@@ -177,6 +180,15 @@ class ArMappingViewModel(
     fun onCameraPermissionResult() {
         arAvailabilityRepository.refreshCameraPermission()
         arAvailabilityRepository.refreshAvailability()
+        sessionState.update { current ->
+            current.copy(
+                statusMessage = if (arAvailabilityRepository.availabilityState.value.hasCameraPermission) {
+                    current.statusMessage
+                } else {
+                    "Camera permission was not granted. Standard mapping remains available."
+                }
+            )
+        }
     }
 
     fun requestArInstall(activity: Activity) {
@@ -194,11 +206,15 @@ class ArMappingViewModel(
     fun onArSessionPaused() {
         arSessionController.onSessionPaused()
         positionSourceRepository.clearArPosition("AR session paused.")
+        pauseSessionIfActive("AR session paused. Recording was paused to avoid stale tracking.")
     }
 
     fun onArSessionFailed(message: String?) {
         arSessionController.onSessionFailed(message)
         positionSourceRepository.clearArPosition(message ?: "AR session failed.")
+        pauseSessionIfActive(
+            message ?: "AR session failed. Recording was paused and sensor fallback remains available."
+        )
     }
 
     fun onArFrameUpdated(frame: Frame) {
@@ -225,7 +241,16 @@ class ArMappingViewModel(
         return arSessionController.placeAnchor(frame, motionEvent)
     }
 
+    fun onScreenDisposed() {
+        motionTrackingRepository.stopTracking()
+        wifiRepository.stopScan()
+        arSessionController.reset()
+        positionSourceRepository.clearArPosition("AR screen closed. Standard mapping remains available.")
+        pauseSessionIfActive("AR screen closed. Recording was paused to avoid stale tracking.")
+    }
+
     override fun onCleared() {
+        onScreenDisposed()
         motionTrackingRepository.close()
         wifiRepository.close()
         super.onCleared()
@@ -331,13 +356,29 @@ class ArMappingViewModel(
         val resolvedStatusMessage = when {
             !canStartAr -> statusMessage
             recordingState.statusMessage != null -> recordingState.statusMessage
-            positionSourceState.trackingQuality == TrackingQuality.LIMITED -> {
-                "Tracking is limited. Move slowly and keep the floor in view."
+            positionSourceState.preferredSourceType == PositionSourceType.SENSORS &&
+                session.trackingQuality != TrackingQuality.GOOD -> {
+                "AR tracking is weak. Sensor fallback is active for position updates."
             }
-            positionSourceState.trackingQuality == TrackingQuality.UNAVAILABLE -> {
-                "Tracking is lost. Re-scan the floor and improve lighting."
+            session.trackingQuality == TrackingQuality.LIMITED -> {
+                session.trackingStatus
+            }
+            session.trackingQuality == TrackingQuality.UNAVAILABLE &&
+                session.lifecycleState != ArSessionLifecycleState.IDLE -> {
+                session.trackingStatus
             }
             else -> positionSourceState.status
+        }
+
+        val fallbackMessage = when {
+            supportState == ArSupportState.UNSUPPORTED -> "This device can use the regular Mapping screen instead."
+            !hasCameraPermission -> "You can skip AR and continue with the regular Mapping screen."
+            installState == ArInstallState.FAILED -> "AR install failed. The regular Mapping screen is the safe fallback."
+            positionSourceState.preferredSourceType == PositionSourceType.SENSORS &&
+                session.lifecycleState == ArSessionLifecycleState.RESUMED -> {
+                "Sensor fallback is active because AR tracking is not stable enough."
+            }
+            else -> null
         }
 
         return ArMappingUiState(
@@ -352,8 +393,21 @@ class ArMappingViewModel(
             preferredPositionSource = positionSourceState.preferredSourceType,
             trackingQuality = positionSourceState.trackingQuality,
             trackingStatus = positionSourceState.status,
-            statusMessage = resolvedStatusMessage
+            statusMessage = resolvedStatusMessage,
+            fallbackMessage = fallbackMessage
         )
+    }
+
+    private fun pauseSessionIfActive(message: String) {
+        sessionState.update { current ->
+            if (current.lifecycleState != RecordingSessionState.ACTIVE) {
+                return@update current
+            }
+            current.copy(
+                lifecycleState = RecordingSessionState.PAUSED,
+                statusMessage = message
+            )
+        }
     }
 
     private fun MotionEstimate.toSensorPositionSample(): LivePositionSample {

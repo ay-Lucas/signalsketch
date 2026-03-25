@@ -35,6 +35,9 @@ class DefaultArSessionController : ArSessionController {
     override fun onSessionPaused() {
         _sessionState.value = _sessionState.value.copy(
             lifecycleState = ArSessionLifecycleState.PAUSED,
+            xMeters = null,
+            yMeters = null,
+            headingDegrees = null,
             trackingQuality = TrackingQuality.UNAVAILABLE,
             trackingStatus = "AR session paused."
         )
@@ -43,6 +46,9 @@ class DefaultArSessionController : ArSessionController {
     override fun onSessionFailed(message: String?) {
         _sessionState.value = _sessionState.value.copy(
             lifecycleState = ArSessionLifecycleState.FAILED,
+            xMeters = null,
+            yMeters = null,
+            headingDegrees = null,
             trackingQuality = TrackingQuality.UNAVAILABLE,
             trackingStatus = message ?: "AR session failed.",
             lastErrorMessage = message

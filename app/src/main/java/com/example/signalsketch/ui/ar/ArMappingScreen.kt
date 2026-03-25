@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -44,7 +45,10 @@ import io.github.sceneview.rememberNodes
 import io.github.sceneview.rememberOnGestureListener
 
 @Composable
-fun ArMappingScreen(viewModel: ArMappingViewModel) {
+fun ArMappingScreen(
+    viewModel: ArMappingViewModel,
+    onOpenStandardMapping: () -> Unit = {}
+) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val activity = context.findActivity()
@@ -66,13 +70,15 @@ fun ArMappingScreen(viewModel: ArMappingViewModel) {
         onSessionResumed = viewModel::onArSessionResumed,
         onSessionPaused = viewModel::onArSessionPaused,
         onSessionFailed = viewModel::onArSessionFailed,
+        onScreenDisposed = viewModel::onScreenDisposed,
         onFrameUpdated = viewModel::onArFrameUpdated,
         onTapFrame = viewModel::onArTap,
         onStartSession = viewModel::startSession,
         onPauseSession = viewModel::pauseSession,
         onResumeSession = viewModel::resumeSession,
         onSaveSession = viewModel::saveSession,
-        onResetSession = viewModel::resetSession
+        onResetSession = viewModel::resetSession,
+        onOpenStandardMapping = onOpenStandardMapping
     )
 }
 
@@ -87,13 +93,15 @@ private fun ArMappingScreen(
     onSessionResumed: () -> Unit,
     onSessionPaused: () -> Unit,
     onSessionFailed: (String?) -> Unit,
+    onScreenDisposed: () -> Unit,
     onFrameUpdated: (Frame) -> Unit,
     onTapFrame: (Frame, android.view.MotionEvent) -> com.google.ar.core.Anchor?,
     onStartSession: () -> Unit,
     onPauseSession: () -> Unit,
     onResumeSession: () -> Unit,
     onSaveSession: () -> Unit,
-    onResetSession: () -> Unit
+    onResetSession: () -> Unit,
+    onOpenStandardMapping: () -> Unit = {}
 ) {
     val engine = rememberEngine()
     val materialLoader = rememberMaterialLoader(engine)
@@ -112,6 +120,23 @@ private fun ArMappingScreen(
             ).apply {
                 position = Float3(marker.xMeters, 0.04f, marker.yMeters)
             }
+        }
+    }
+
+    LaunchedEffect(state.availability.canStartAr) {
+        if (!state.availability.canStartAr) {
+            currentFrame.value = null
+            anchorNodes.clear()
+            wifiMarkerNodes.clear()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            currentFrame.value = null
+            anchorNodes.clear()
+            wifiMarkerNodes.clear()
+            onScreenDisposed()
         }
     }
 
@@ -180,7 +205,8 @@ private fun ArMappingScreen(
                 onPauseSession = onPauseSession,
                 onResumeSession = onResumeSession,
                 onSaveSession = onSaveSession,
-                onResetSession = onResetSession
+                onResetSession = onResetSession,
+                onOpenStandardMapping = onOpenStandardMapping
             )
             if (state.availability.canStartAr) {
                 PlaneIndicatorCard(
@@ -203,7 +229,8 @@ private fun StatusCard(
     onPauseSession: () -> Unit,
     onResumeSession: () -> Unit,
     onSaveSession: () -> Unit,
-    onResetSession: () -> Unit
+    onResetSession: () -> Unit,
+    onOpenStandardMapping: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -233,9 +260,15 @@ private fun StatusCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            state.fallbackMessage?.let { fallbackMessage ->
+                Text(
+                    text = fallbackMessage,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             if (state.trackingQuality == TrackingQuality.LIMITED) {
                 Text(
-                    text = "Move slowly and keep the floor and nearby textured surfaces in view.",
+                    text = "Move slowly, keep the floor in view, and avoid quick turns.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -260,9 +293,19 @@ private fun StatusCard(
                 }
                 OutlinedButton(
                     onClick = onRequestArInstall,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enabled = state.availability.supportState == com.example.signalsketch.ar.ArSupportState.SUPPORTED &&
+                        state.availability.installState != com.example.signalsketch.ar.ArInstallState.READY
                 ) {
                     Text("Install / Update AR")
+                }
+            }
+            if (!state.availability.canStartAr || state.preferredPositionSource == PositionSourceType.SENSORS) {
+                OutlinedButton(
+                    onClick = onOpenStandardMapping,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Use Standard Mapping")
                 }
             }
             OutlinedButton(

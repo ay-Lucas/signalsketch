@@ -73,12 +73,12 @@ class DefaultArAvailabilityRepository(
             installState == ArInstallState.READY &&
             hasCameraPermission
         val statusMessage = when {
-            supportState == ArSupportState.CHECKING -> "Checking ARCore availability."
-            supportState == ArSupportState.UNSUPPORTED -> "This device does not support ARCore."
-            installState == ArInstallState.REQUIRES_INSTALL -> "Google Play Services for AR is not ready."
-            installState == ArInstallState.INSTALLING -> "ARCore install or update has been requested."
-            installState == ArInstallState.FAILED -> "ARCore install or update could not be completed."
-            !hasCameraPermission -> "Camera permission is required before AR can start."
+            supportState == ArSupportState.CHECKING -> "Checking AR support. If this does not finish, use standard mapping."
+            supportState == ArSupportState.UNSUPPORTED -> "AR is unavailable on this device. Standard mapping still works."
+            installState == ArInstallState.REQUIRES_INSTALL -> "Google Play Services for AR is not ready yet."
+            installState == ArInstallState.INSTALLING -> "AR install or update is in progress."
+            installState == ArInstallState.FAILED -> "AR install or update could not be completed. Standard mapping is still available."
+            !hasCameraPermission -> "Camera permission is required for AR. Standard mapping works without it."
             else -> "AR is ready to start."
         }
 
