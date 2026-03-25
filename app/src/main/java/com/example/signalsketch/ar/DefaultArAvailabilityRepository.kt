@@ -60,10 +60,6 @@ class DefaultArAvailabilityRepository(
         }
     }
 
-    override fun markInstallFlowRetried() {
-        hasRequestedInstall = true
-    }
-
     private fun updateState(
         supportState: ArSupportState = _availabilityState.value.supportState,
         installState: ArInstallState = _availabilityState.value.installState,

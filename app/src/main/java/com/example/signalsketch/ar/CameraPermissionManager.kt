@@ -14,6 +14,4 @@ class CameraPermissionManager(
             Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
     }
-
-    fun requiredPermissions(): List<String> = listOf(Manifest.permission.CAMERA)
 }

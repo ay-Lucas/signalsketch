@@ -48,6 +48,7 @@ private class FileSessionExportManager(
 ) : SessionExportManager {
     override suspend fun exportSession(session: SavedSessionDetail): SharedSessionExport {
         return withContext(Dispatchers.IO) {
+            // Cache keeps exports shareable without requesting broad storage access.
             val exportDir = File(context.cacheDir, "shared_exports").apply {
                 mkdirs()
             }

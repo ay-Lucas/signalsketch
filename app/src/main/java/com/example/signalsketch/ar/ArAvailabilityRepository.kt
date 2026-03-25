@@ -11,6 +11,4 @@ interface ArAvailabilityRepository {
     fun refreshCameraPermission()
 
     fun requestInstall(activity: Activity)
-
-    fun markInstallFlowRetried()
 }
