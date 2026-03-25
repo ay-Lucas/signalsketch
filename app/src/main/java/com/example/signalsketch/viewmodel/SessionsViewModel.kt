@@ -31,6 +31,7 @@ data class SavedSessionListItemUiState(
 
 data class SessionsUiState(
     val sessions: List<SavedSessionListItemUiState> = emptyList(),
+    val isLoading: Boolean = true,
     val emptyMessage: String = "No saved sessions yet."
 )
 
@@ -57,6 +58,7 @@ class SessionsViewModel(
         .map { sessions ->
             SessionsUiState(
                 sessions = sessions.map { it.toListItemUiState() },
+                isLoading = false,
                 emptyMessage = "Save a paused or completed mapping session to see it here."
             )
         }

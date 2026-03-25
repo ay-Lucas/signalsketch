@@ -50,7 +50,7 @@ class ScanViewModel(
             }
             snapshot.isScanning && snapshot.visibleNetworks.isEmpty() -> null
             snapshot.visibleNetworks.isEmpty() && snapshot.connectedNetwork == null -> {
-                statusMessage ?: "No Wi-Fi data is available yet."
+                statusMessage ?: "No Wi-Fi data is available yet. Refresh or start scanning to try again."
             }
             else -> statusMessage
         }
@@ -89,7 +89,7 @@ class ScanViewModel(
 
         val started = wifiRepository.startScan()
         statusMessages.value = if (started) {
-            null
+            "Scanning started. Nearby networks will appear here when results arrive."
         } else {
             "Scanning could not start. Check permissions, location services, or device Wi-Fi state."
         }

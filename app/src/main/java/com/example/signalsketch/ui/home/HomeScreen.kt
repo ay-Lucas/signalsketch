@@ -1,16 +1,21 @@
 package com.example.signalsketch.ui.home
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.viewmodel.HomeActionUiState
 import com.example.signalsketch.viewmodel.HomeViewModel
 
 @Composable
@@ -22,6 +27,8 @@ fun HomeScreen(
     onSavedSessionsClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
+    val actions = viewModel.actionSummaries
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -36,23 +43,59 @@ fun HomeScreen(
             text = viewModel.subtitle,
             style = MaterialTheme.typography.bodyLarge
         )
-        HomeActionButton(label = "Live Scan", onClick = onLiveScanClick)
-        HomeActionButton(label = "Mapping", onClick = onMappingClick)
-        HomeActionButton(label = "AR Mapping", onClick = onArMappingClick)
-        HomeActionButton(label = "Saved Sessions", onClick = onSavedSessionsClick)
-        HomeActionButton(label = "Settings", onClick = onSettingsClick)
+        HomeActionButton(
+            action = requireNotNull(actions["Live Scan"]),
+            onClick = onLiveScanClick
+        )
+        HomeActionButton(
+            action = requireNotNull(actions["Mapping"]),
+            onClick = onMappingClick
+        )
+        HomeActionButton(
+            action = requireNotNull(actions["AR Mapping"]),
+            onClick = onArMappingClick
+        )
+        HomeActionButton(
+            action = requireNotNull(actions["Saved Sessions"]),
+            onClick = onSavedSessionsClick
+        )
+        HomeActionButton(
+            action = requireNotNull(actions["Settings"]),
+            onClick = onSettingsClick
+        )
     }
 }
 
 @Composable
 private fun HomeActionButton(
-    label: String,
+    action: HomeActionUiState,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
+    Card(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(text = label)
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = action.label,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = action.description,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Button(
+                onClick = onClick,
+                modifier = Modifier.semantics {
+                    contentDescription = "${action.label}. ${action.description}"
+                }
+            ) {
+                Text(text = "Open")
+            }
+        }
     }
 }

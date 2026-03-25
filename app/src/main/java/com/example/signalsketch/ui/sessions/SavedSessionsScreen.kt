@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -22,6 +23,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.signalsketch.ui.mapping.SessionMapCard
 import com.example.signalsketch.storage.SharedSessionExport
@@ -91,7 +94,20 @@ private fun SavedSessionsScreen(
             text = "Saved sessions include the original walked path plus all linked Wi-Fi samples.",
             style = MaterialTheme.typography.bodyMedium
         )
-        if (uiState.sessions.isEmpty()) {
+        if (uiState.isLoading) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        text = "Loading saved sessions...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        } else if (uiState.sessions.isEmpty()) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = uiState.emptyMessage,
@@ -231,6 +247,9 @@ private fun SessionCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "${session.title}. ${session.subtitle}. ${session.metadata}"
+            }
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

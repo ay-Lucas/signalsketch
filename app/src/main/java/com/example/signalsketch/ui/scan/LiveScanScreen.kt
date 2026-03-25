@@ -20,6 +20,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.signalsketch.viewmodel.ScanScreenState
 import com.example.signalsketch.viewmodel.ScanViewModel
@@ -65,6 +67,12 @@ private fun LiveScanScreen(
             )
         }
         item {
+            Text(
+                text = "Review permissions, check the connected network, and scan for nearby access points.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        item {
             PermissionStatusCard(
                 state = state,
                 onRequestPermission = onRequestPermission
@@ -72,6 +80,7 @@ private fun LiveScanScreen(
         }
         item {
             ScanControlsRow(
+                canScan = state.hasPermission,
                 isScanning = state.isScanning,
                 onToggleScanning = onToggleScanning,
                 onRefresh = onRefresh
@@ -127,13 +136,27 @@ private fun PermissionStatusCard(
 ) {
     val permissionText = when {
         state.permissionStatus.isGranted -> "Permissions granted"
+        state.permissionStatus.requiresLocationServices &&
+            !state.permissionStatus.isLocationServicesEnabled -> {
+            "Location services are disabled for Wi-Fi scanning"
+        }
         state.permissionStatus.missingRuntimePermissions.isNotEmpty() -> {
             "Missing: ${state.permissionStatus.missingRuntimePermissions.joinToString()}"
         }
-        state.permissionStatus.requiresLocationServices && !state.permissionStatus.isLocationServicesEnabled -> {
-            "Location services are disabled"
-        }
         else -> "Permissions incomplete"
+    }
+    val guidanceText = when {
+        state.permissionStatus.shouldShowRationale -> {
+            "Android denied Wi-Fi-related permissions before. Request them again after explaining that scan results are needed to map signal strength."
+        }
+        state.permissionStatus.requiresLocationServices &&
+            !state.permissionStatus.isLocationServicesEnabled -> {
+            "Enable location services in system settings, then refresh this screen. Standard mapping without live scan is still available elsewhere in the app."
+        }
+        state.permissionStatus.missingRuntimePermissions.isNotEmpty() -> {
+            "This screen needs Wi-Fi permissions and, on older Android versions, location-related access to read scan results."
+        }
+        else -> "This device is ready to read connected Wi-Fi info and visible scan results."
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -147,11 +170,7 @@ private fun PermissionStatusCard(
             )
             Text(text = permissionText)
             Text(
-                text = if (state.permissionStatus.shouldShowRationale) {
-                    "Android has denied Wi-Fi-related permissions before. Request again after explaining why scanning needs access."
-                } else {
-                    "This screen needs Wi-Fi and, on older Android versions, location-related access to read scan results."
-                },
+                text = guidanceText,
                 style = MaterialTheme.typography.bodySmall
             )
             Button(
@@ -167,6 +186,7 @@ private fun PermissionStatusCard(
 
 @Composable
 private fun ScanControlsRow(
+    canScan: Boolean,
     isScanning: Boolean,
     onToggleScanning: () -> Unit,
     onRefresh: () -> Unit
@@ -177,6 +197,7 @@ private fun ScanControlsRow(
     ) {
         Button(
             onClick = onToggleScanning,
+            enabled = canScan,
             modifier = Modifier.weight(1f)
         ) {
             Text(if (isScanning) "Stop Scanning" else "Start Scanning")
@@ -204,13 +225,25 @@ private fun ConnectedNetworkCard(connectedNetwork: ConnectedWifiNetwork?) {
 
     StatusCard(
         title = "Connected Network",
-        message = message
+        message = message,
+        contentDescription = "Connected Wi-Fi network details. $message"
     )
 }
 
 @Composable
 private fun VisibleNetworkCard(network: VisibleWifiNetwork) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = buildString {
+                    append(network.ssid ?: "Hidden SSID")
+                    append(". Signal ")
+                    append("${network.rssiDbm} dBm. ")
+                    append("BSSID ${network.bssid}.")
+                }
+            }
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -246,9 +279,16 @@ private fun LoadingCard() {
 @Composable
 private fun StatusCard(
     title: String,
-    message: String
+    message: String,
+    contentDescription: String = "$title. $message"
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                this.contentDescription = contentDescription
+            }
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
