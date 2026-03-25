@@ -1,5 +1,8 @@
 package com.example.signalsketch.ui.sessions
 
+import android.content.ClipData
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,8 +21,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.signalsketch.ui.mapping.SessionMapCard
+import com.example.signalsketch.storage.SharedSessionExport
 import com.example.signalsketch.viewmodel.SavedSessionDetailUiState
 import com.example.signalsketch.viewmodel.SavedSessionDetailViewModel
 import com.example.signalsketch.viewmodel.SavedSessionListItemUiState
@@ -44,6 +49,8 @@ fun SavedSessionDetailScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val pendingShareExport by viewModel.shareExport.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(uiState.isDeleted) {
         if (uiState.isDeleted) {
@@ -51,9 +58,16 @@ fun SavedSessionDetailScreen(
         }
     }
 
+    LaunchedEffect(pendingShareExport) {
+        val shareExport = pendingShareExport ?: return@LaunchedEffect
+        context.shareSessionExport(shareExport, uiState.title)
+        viewModel.onShareHandled()
+    }
+
     SavedSessionDetailScreen(
         uiState = uiState,
         onDeleteSession = viewModel::deleteSession,
+        onShareSession = viewModel::shareSession,
         onBack = onBack
     )
 }
@@ -102,6 +116,7 @@ private fun SavedSessionsScreen(
 private fun SavedSessionDetailScreen(
     uiState: SavedSessionDetailUiState,
     onDeleteSession: () -> Unit,
+    onShareSession: () -> Unit,
     onBack: () -> Unit
 ) {
     Column(
@@ -170,6 +185,14 @@ private fun SavedSessionDetailScreen(
                 )
 
                 Button(
+                    onClick = onShareSession,
+                    enabled = !uiState.isExporting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (uiState.isExporting) "Preparing Share..." else "Share Session")
+                }
+
+                Button(
                     onClick = onDeleteSession,
                     enabled = uiState.canDelete,
                     modifier = Modifier.fillMaxWidth()
@@ -179,6 +202,24 @@ private fun SavedSessionDetailScreen(
             }
         }
     }
+}
+
+private fun Context.shareSessionExport(
+    shareExport: SharedSessionExport,
+    title: String
+) {
+    val uris = arrayListOf(shareExport.imageUri, shareExport.dataUri)
+    val sendIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+        type = "*/*"
+        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        putExtra(Intent.EXTRA_SUBJECT, title)
+        putExtra(Intent.EXTRA_TEXT, "SignalSketch export for $title")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = ClipData.newUri(contentResolver, "Session Preview", shareExport.imageUri).apply {
+            addItem(ClipData.Item(shareExport.dataUri))
+        }
+    }
+    startActivity(Intent.createChooser(sendIntent, "Share Session Export"))
 }
 
 @Composable

@@ -8,10 +8,13 @@ import com.example.signalsketch.data.repo.SavedSessionDetail
 import com.example.signalsketch.data.repo.SavedSessionStatus
 import com.example.signalsketch.data.repo.SavedSessionSummary
 import com.example.signalsketch.data.repo.ScanSessionRepositoryFactory
+import com.example.signalsketch.storage.SessionExportManagerFactory
+import com.example.signalsketch.storage.SharedSessionExport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,7 +44,8 @@ data class SavedSessionDetailUiState(
     val wifiSamples: List<RecordedWifiSample> = emptyList(),
     val isLoading: Boolean = true,
     val canDelete: Boolean = false,
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    val isExporting: Boolean = false
 )
 
 class SessionsViewModel(
@@ -68,13 +72,17 @@ class SavedSessionDetailViewModel(
     savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application) {
     private val repository = ScanSessionRepositoryFactory.create(application)
+    private val exportManager = SessionExportManagerFactory.create(application)
     private val sessionId = checkNotNull(savedStateHandle.get<Long>("sessionId"))
     private val deletedState = MutableStateFlow(false)
+    private val exportingState = MutableStateFlow(false)
+    private val pendingShareExport = MutableStateFlow<SharedSessionExport?>(null)
 
     val uiState: StateFlow<SavedSessionDetailUiState> = combine(
         repository.observeSessionDetail(sessionId),
-        deletedState
-    ) { detail, isDeleted ->
+        deletedState,
+        exportingState
+    ) { detail, isDeleted, isExporting ->
         when {
             isDeleted -> SavedSessionDetailUiState(
                 sessionId = sessionId,
@@ -83,9 +91,10 @@ class SavedSessionDetailViewModel(
             )
             detail == null -> SavedSessionDetailUiState(
                 sessionId = sessionId,
-                isLoading = false
+                isLoading = false,
+                isExporting = isExporting
             )
-            else -> detail.toUiState()
+            else -> detail.toUiState(isExporting = isExporting)
         }
     }.stateIn(
         scope = viewModelScope,
@@ -93,11 +102,29 @@ class SavedSessionDetailViewModel(
         initialValue = SavedSessionDetailUiState(sessionId = sessionId)
     )
 
+    val shareExport: StateFlow<SharedSessionExport?> = pendingShareExport
+
     fun deleteSession() {
         viewModelScope.launch {
             repository.deleteSession(sessionId)
             deletedState.value = true
         }
+    }
+
+    fun shareSession() {
+        viewModelScope.launch {
+            exportingState.value = true
+            try {
+                val detail = repository.observeSessionDetail(sessionId).first() ?: return@launch
+                pendingShareExport.value = exportManager.exportSession(detail)
+            } finally {
+                exportingState.value = false
+            }
+        }
+    }
+
+    fun onShareHandled() {
+        pendingShareExport.value = null
     }
 }
 
@@ -117,7 +144,7 @@ private fun SavedSessionSummary.toListItemUiState(): SavedSessionListItemUiState
     )
 }
 
-private fun SavedSessionDetail.toUiState(): SavedSessionDetailUiState {
+private fun SavedSessionDetail.toUiState(isExporting: Boolean): SavedSessionDetailUiState {
     return SavedSessionDetailUiState(
         sessionId = summary.sessionId,
         title = summary.name,
@@ -155,7 +182,8 @@ private fun SavedSessionDetail.toUiState(): SavedSessionDetailUiState {
             )
         },
         isLoading = false,
-        canDelete = true
+        canDelete = true,
+        isExporting = isExporting
     )
 }
 
