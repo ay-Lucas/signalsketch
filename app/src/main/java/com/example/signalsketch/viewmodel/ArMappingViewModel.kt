@@ -13,6 +13,7 @@ import com.example.signalsketch.ar.DefaultArSessionController
 import com.example.signalsketch.data.repo.RecordedPathPointPayload
 import com.example.signalsketch.data.repo.RecordedSessionPayload
 import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
+import com.example.signalsketch.data.repo.SavedSessionStatus
 import com.example.signalsketch.data.repo.ScanSessionRepositoryFactory
 import com.example.signalsketch.position.LivePositionSample
 import com.example.signalsketch.position.PositionSourceRepositoryFactory
@@ -64,6 +65,9 @@ data class ArMappingUiState(
 
     val canResumeSession: Boolean
         get() = recordingSessionState == RecordingSessionState.PAUSED
+
+    val canSaveSession: Boolean
+        get() = recordingSessionState != RecordingSessionState.IDLE && wifiSampleCount > 0
 
     val canResetSession: Boolean
         get() = recordingSessionState != RecordingSessionState.IDLE || liveSampleMarkers.isNotEmpty()
@@ -140,20 +144,25 @@ class ArMappingViewModel(
     }
 
     fun resetSession() {
-        val persistedSession = sessionState.value.toRecordedSessionPayload()
         motionTrackingRepository.stopTracking()
         wifiRepository.stopScan()
         sessionState.value = ArRecordingSessionState(
-            statusMessage = if (persistedSession != null) {
-                "AR mapping session saved and reset."
-            } else {
-                "AR mapping session reset."
-            }
+            statusMessage = "AR mapping session cleared."
         )
-        if (persistedSession != null) {
-            viewModelScope.launch {
-                scanSessionRepository.saveRecordedSession(persistedSession)
-            }
+    }
+
+    fun saveSession() {
+        val persistedSession = sessionState.value.toRecordedSessionPayload() ?: return
+        motionTrackingRepository.stopTracking()
+        wifiRepository.stopScan()
+        viewModelScope.launch {
+            scanSessionRepository.saveRecordedSession(persistedSession)
+            sessionState.value = ArRecordingSessionState(
+                statusMessage = when (persistedSession.status) {
+                    SavedSessionStatus.PAUSED -> "Paused AR mapping session saved."
+                    SavedSessionStatus.COMPLETED -> "Completed AR mapping session saved."
+                }
+            )
         }
     }
 
@@ -414,7 +423,12 @@ private fun ArRecordingSessionState.toRecordedSessionPayload(): RecordedSessionP
     return RecordedSessionPayload(
         name = "AR Mapping Session $sessionId",
         startedAtEpochMillis = sessionId,
-        endedAtEpochMillis = System.currentTimeMillis(),
+        endedAtEpochMillis = if (lifecycleState == RecordingSessionState.PAUSED) null else System.currentTimeMillis(),
+        status = when (lifecycleState) {
+            RecordingSessionState.PAUSED -> SavedSessionStatus.PAUSED
+            RecordingSessionState.ACTIVE -> SavedSessionStatus.COMPLETED
+            RecordingSessionState.IDLE -> return null
+        },
         notes = "Source: AR mapping",
         pathPoints = pathSamples.map { sample ->
             RecordedPathPointPayload(

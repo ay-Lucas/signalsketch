@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.signalsketch.data.repo.RecordedPathPointPayload
 import com.example.signalsketch.data.repo.RecordedSessionPayload
 import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
+import com.example.signalsketch.data.repo.SavedSessionStatus
 import com.example.signalsketch.data.repo.ScanSessionRepositoryFactory
 import com.example.signalsketch.position.LivePositionSample
 import com.example.signalsketch.position.PositionSourceRepositoryFactory
@@ -96,20 +97,25 @@ class MappingSessionViewModel(
     }
 
     fun resetSession() {
-        val persistedSession = sessionState.value.toRecordedSessionPayload()
         motionTrackingRepository.stopTracking()
         wifiRepository.stopScan()
         sessionState.value = SessionRecordingState(
-            statusMessage = if (persistedSession != null) {
-                "Session saved and reset."
-            } else {
-                "Session reset."
-            }
+            statusMessage = "Session cleared."
         )
-        if (persistedSession != null) {
-            viewModelScope.launch {
-                scanSessionRepository.saveRecordedSession(persistedSession)
-            }
+    }
+
+    fun saveSession() {
+        val persistedSession = sessionState.value.toRecordedSessionPayload() ?: return
+        motionTrackingRepository.stopTracking()
+        wifiRepository.stopScan()
+        viewModelScope.launch {
+            scanSessionRepository.saveRecordedSession(persistedSession)
+            sessionState.value = SessionRecordingState(
+                statusMessage = when (persistedSession.status) {
+                    SavedSessionStatus.PAUSED -> "Paused session saved."
+                    SavedSessionStatus.COMPLETED -> "Completed session saved."
+                }
+            )
         }
     }
 
@@ -286,7 +292,12 @@ private fun SessionRecordingState.toRecordedSessionPayload(): RecordedSessionPay
     return RecordedSessionPayload(
         name = "Mapping Session $sessionId",
         startedAtEpochMillis = startedAt,
-        endedAtEpochMillis = System.currentTimeMillis(),
+        endedAtEpochMillis = if (lifecycleState == RecordingSessionState.PAUSED) null else System.currentTimeMillis(),
+        status = when (lifecycleState) {
+            RecordingSessionState.PAUSED -> SavedSessionStatus.PAUSED
+            RecordingSessionState.ACTIVE -> SavedSessionStatus.COMPLETED
+            RecordingSessionState.IDLE -> return null
+        },
         notes = "Source: 2D mapping",
         pathPoints = pathSamples.map { sample ->
             RecordedPathPointPayload(

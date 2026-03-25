@@ -62,6 +62,9 @@ data class MappingSessionUiState(
     val canResume: Boolean
         get() = sessionState == RecordingSessionState.PAUSED
 
+    val canSave: Boolean
+        get() = sessionState != RecordingSessionState.IDLE && (wifiSampleCount > 0 || pathSampleCount > 0)
+
     val canReset: Boolean
         get() = sessionState != RecordingSessionState.IDLE || wifiSampleCount > 0 || pathSampleCount > 0
 }

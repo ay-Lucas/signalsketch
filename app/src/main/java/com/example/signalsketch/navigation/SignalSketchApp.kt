@@ -8,8 +8,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -19,11 +21,13 @@ import com.example.signalsketch.ui.ar.ArMappingScreen
 import com.example.signalsketch.ui.home.HomeScreen
 import com.example.signalsketch.ui.mapping.MappingScreen
 import com.example.signalsketch.ui.scan.LiveScanScreen
+import com.example.signalsketch.ui.sessions.SavedSessionDetailScreen
 import com.example.signalsketch.ui.sessions.SavedSessionsScreen
 import com.example.signalsketch.ui.settings.SettingsScreen
 import com.example.signalsketch.viewmodel.ArMappingViewModel
 import com.example.signalsketch.viewmodel.HomeViewModel
 import com.example.signalsketch.viewmodel.MappingSessionViewModel
+import com.example.signalsketch.viewmodel.SavedSessionDetailViewModel
 import com.example.signalsketch.viewmodel.ScanViewModel
 import com.example.signalsketch.viewmodel.SessionsViewModel
 import com.example.signalsketch.viewmodel.SettingsViewModel
@@ -94,7 +98,21 @@ fun SignalSketchApp() {
                 ArMappingScreen(viewModel = viewModel<ArMappingViewModel>())
             }
             composable(AppDestination.SavedSessions.route) {
-                SavedSessionsScreen(viewModel = viewModel<SessionsViewModel>())
+                SavedSessionsScreen(
+                    viewModel = viewModel<SessionsViewModel>(),
+                    onSessionClick = { sessionId ->
+                        navController.navigate(AppDestination.SavedSessionDetail.createRoute(sessionId))
+                    }
+                )
+            }
+            composable(
+                route = AppDestination.SavedSessionDetail.route,
+                arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+            ) {
+                SavedSessionDetailScreen(
+                    viewModel = viewModel<SavedSessionDetailViewModel>(),
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable(AppDestination.Settings.route) {
                 SettingsScreen(viewModel = viewModel<SettingsViewModel>())

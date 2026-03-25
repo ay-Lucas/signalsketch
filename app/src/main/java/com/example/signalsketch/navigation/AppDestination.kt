@@ -9,5 +9,8 @@ sealed class AppDestination(
     data object Mapping : AppDestination("mapping", "Mapping")
     data object ArMapping : AppDestination("ar_mapping", "AR Mapping")
     data object SavedSessions : AppDestination("saved_sessions", "Saved Sessions")
+    data object SavedSessionDetail : AppDestination("saved_sessions/{sessionId}", "Session Detail") {
+        fun createRoute(sessionId: Long): String = "saved_sessions/$sessionId"
+    }
     data object Settings : AppDestination("settings", "Settings")
 }

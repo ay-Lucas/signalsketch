@@ -71,6 +71,7 @@ fun ArMappingScreen(viewModel: ArMappingViewModel) {
         onStartSession = viewModel::startSession,
         onPauseSession = viewModel::pauseSession,
         onResumeSession = viewModel::resumeSession,
+        onSaveSession = viewModel::saveSession,
         onResetSession = viewModel::resetSession
     )
 }
@@ -91,6 +92,7 @@ private fun ArMappingScreen(
     onStartSession: () -> Unit,
     onPauseSession: () -> Unit,
     onResumeSession: () -> Unit,
+    onSaveSession: () -> Unit,
     onResetSession: () -> Unit
 ) {
     val engine = rememberEngine()
@@ -177,6 +179,7 @@ private fun ArMappingScreen(
                 onStartSession = onStartSession,
                 onPauseSession = onPauseSession,
                 onResumeSession = onResumeSession,
+                onSaveSession = onSaveSession,
                 onResetSession = onResetSession
             )
             if (state.availability.canStartAr) {
@@ -199,6 +202,7 @@ private fun StatusCard(
     onStartSession: () -> Unit,
     onPauseSession: () -> Unit,
     onResumeSession: () -> Unit,
+    onSaveSession: () -> Unit,
     onResetSession: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -297,12 +301,24 @@ private fun StatusCard(
                 ) {
                     Text("Resume")
                 }
+                Button(
+                    onClick = onSaveSession,
+                    enabled = state.canSaveSession,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Save")
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedButton(
                     onClick = onResetSession,
                     enabled = state.canResetSession,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Reset")
+                    Text("Discard")
                 }
             }
         }

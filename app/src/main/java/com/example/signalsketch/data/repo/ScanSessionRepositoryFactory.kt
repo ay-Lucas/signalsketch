@@ -16,6 +16,7 @@ object ScanSessionRepositoryFactory {
     private fun buildRepository(context: Context): ScanSessionRepository {
         val database = DatabaseFactory.create(context)
         return RoomScanSessionRepository(
+            database = database,
             scanSessionDao = database.scanSessionDao(),
             wifiSampleDao = database.wifiSampleDao(),
             pathPointDao = database.pathPointDao()
