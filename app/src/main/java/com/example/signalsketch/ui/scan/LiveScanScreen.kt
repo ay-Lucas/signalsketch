@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -23,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.ui.theme.OnDark
+import com.example.signalsketch.ui.theme.SurfaceDark
 import com.example.signalsketch.viewmodel.ScanScreenState
 import com.example.signalsketch.viewmodel.ScanViewModel
 import com.example.signalsketch.wifi.ConnectedWifiNetwork
@@ -159,7 +162,14 @@ private fun PermissionStatusCard(
         else -> "This device is ready to read connected Wi-Fi info and visible scan results."
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -262,7 +272,14 @@ private fun VisibleNetworkCard(network: VisibleWifiNetwork) {
 
 @Composable
 private fun LoadingCard() {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Row(
             modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -287,7 +304,12 @@ private fun StatusCard(
             .fillMaxWidth()
             .semantics {
                 this.contentDescription = contentDescription
-            }
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

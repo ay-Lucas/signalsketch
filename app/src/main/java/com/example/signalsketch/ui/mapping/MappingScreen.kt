@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -16,6 +17,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.ui.theme.OnDark
+import com.example.signalsketch.ui.theme.SurfaceDark
 import com.example.signalsketch.position.PositionSourceType
 import com.example.signalsketch.position.TrackingQuality
 import com.example.signalsketch.sensors.MotionTrackingState
@@ -85,7 +88,14 @@ private fun SessionStatusCard(
     onSaveSession: () -> Unit,
     onResetSession: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -164,7 +174,14 @@ private fun SessionStatusCard(
 
 @Composable
 private fun MotionDebugCard(state: MappingSessionUiState) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)

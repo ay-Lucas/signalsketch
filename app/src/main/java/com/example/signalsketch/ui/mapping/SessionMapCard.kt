@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,9 +26,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.signalsketch.heatmap.HeatmapRenderer
 import com.example.signalsketch.heatmap.MapViewportState
+import com.example.signalsketch.data.repo.ColorScalePreference
+import com.example.signalsketch.data.repo.DataStoreAppPreferencesRepository
+import com.example.signalsketch.storage.appPreferencesDataStore
+import kotlinx.coroutines.flow.map
 import com.example.signalsketch.viewmodel.RecordedPathSample
 import com.example.signalsketch.viewmodel.RecordedWifiSample
 
@@ -39,10 +46,23 @@ fun SessionMapCard(
     title: String = "Map View",
     description: String = "A simple grid heatmap is derived from Wi-Fi samples, while the original path and sample points stay visible."
 ) {
+    val context = LocalContext.current
+    val preferencesRepository = remember { DataStoreAppPreferencesRepository(context.appPreferencesDataStore) }
+    val colorScale by preferencesRepository.preferences
+        .map { it.selectedColorScale }
+        .collectAsState(initial = com.example.signalsketch.data.repo.ColorScalePreference.VIRIDIS)
+
     val renderer = remember { HeatmapRenderer() }
     var viewport by remember { mutableStateOf(MapViewportState()) }
 
-    Card(modifier = modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -59,7 +79,7 @@ fun SessionMapCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(280.dp)
-                    .background(Color(0xFFF6F3EC))
+                    .background(Color(0xFF101010))
                     .pointerInput(Unit) {
                         detectTransformGestures { _, pan, zoom, _ ->
                             viewport = viewport.copy(
@@ -79,13 +99,13 @@ fun SessionMapCard(
                     )
 
                     drawLine(
-                        color = Color(0xFFB0A89C),
+                        color = Color(0xFF424242),
                         start = Offset(renderModel.center.x, 0f),
                         end = Offset(renderModel.center.x, size.height),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
                     )
                     drawLine(
-                        color = Color(0xFFB0A89C),
+                        color = Color(0xFF424242),
                         start = Offset(0f, renderModel.center.y),
                         end = Offset(size.width, renderModel.center.y),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f))
@@ -93,7 +113,7 @@ fun SessionMapCard(
 
                     renderModel.heatmapCells.forEach { cell ->
                         drawRect(
-                            color = renderer.heatmapColorFor(cell.bucket),
+                            color = renderer.heatmapColorFor(cell.bucket, colorScale),
                             topLeft = cell.rect.topLeft,
                             size = cell.rect.size
                         )
@@ -101,7 +121,7 @@ fun SessionMapCard(
 
                     renderModel.path.zipWithNext { start, end ->
                         drawLine(
-                            color = Color(0xFF2B4C7E),
+                            color = Color(0xFFFFC107),
                             start = start,
                             end = end,
                             strokeWidth = 5f
@@ -109,14 +129,14 @@ fun SessionMapCard(
                     }
                     renderModel.path.forEach { point ->
                         drawCircle(
-                            color = Color(0xFF16324F),
+                            color = Color(0xFFFFF9C4),
                             radius = 5f,
                             center = point
                         )
                     }
                     renderModel.wifiPoints.forEach { point ->
                         drawCircle(
-                            color = renderer.colorFor(point.bucket),
+                            color = renderer.colorFor(point.bucket, colorScale),
                             radius = 7f,
                             center = point.offset
                         )
@@ -131,20 +151,23 @@ fun SessionMapCard(
                     )
                 }
             }
-            SignalLegend(renderer = renderer)
+            SignalLegend(renderer = renderer, colorScale = colorScale)
         }
     }
 }
 
 @Composable
-private fun SignalLegend(renderer: HeatmapRenderer) {
+private fun SignalLegend(
+    renderer: HeatmapRenderer,
+    colorScale: ColorScalePreference
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.WEAK), label = "Weak")
-        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.MEDIUM), label = "Medium")
-        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.STRONG), label = "Strong")
+        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.WEAK, colorScale), label = "Weak")
+        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.MEDIUM, colorScale), label = "Medium")
+        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.STRONG, colorScale), label = "Strong")
     }
 }
 

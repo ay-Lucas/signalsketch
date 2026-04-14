@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,6 +27,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.ui.theme.OnDark
+import com.example.signalsketch.ui.theme.SurfaceDark
 import com.example.signalsketch.ui.mapping.SessionMapCard
 import com.example.signalsketch.storage.SharedSessionExport
 import com.example.signalsketch.viewmodel.SavedSessionDetailUiState
@@ -95,7 +98,14 @@ private fun SavedSessionsScreen(
             style = MaterialTheme.typography.bodyMedium
         )
         if (uiState.isLoading) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = SurfaceDark,
+                    contentColor = OnDark
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -108,7 +118,14 @@ private fun SavedSessionsScreen(
                 }
             }
         } else if (uiState.sessions.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = SurfaceDark,
+                    contentColor = OnDark
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
                 Text(
                     text = uiState.emptyMessage,
                     modifier = Modifier.padding(16.dp),
@@ -150,7 +167,14 @@ private fun SavedSessionDetailScreen(
 
         when {
             uiState.isLoading -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = SurfaceDark,
+                        contentColor = OnDark
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
                     Text(
                         text = "Loading saved session...",
                         modifier = Modifier.padding(16.dp),
@@ -159,7 +183,14 @@ private fun SavedSessionDetailScreen(
                 }
             }
             uiState.title.isBlank() -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = SurfaceDark,
+                        contentColor = OnDark
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
                     Text(
                         text = "This session is unavailable.",
                         modifier = Modifier.padding(16.dp),
@@ -168,7 +199,14 @@ private fun SavedSessionDetailScreen(
                 }
             }
             else -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = SurfaceDark,
+                        contentColor = OnDark
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -249,7 +287,12 @@ private fun SessionCard(
             .clickable(onClick = onClick)
             .semantics {
                 contentDescription = "${session.title}. ${session.subtitle}. ${session.metadata}"
-            }
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

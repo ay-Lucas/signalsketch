@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import com.example.signalsketch.data.repo.ColorScalePreference
 import com.example.signalsketch.viewmodel.RecordedPathSample
 import com.example.signalsketch.viewmodel.RecordedWifiSample
 import kotlin.math.ceil
@@ -101,16 +102,34 @@ class HeatmapRenderer {
         )
     }
 
-    fun colorFor(bucket: SignalBucket): Color {
-        return when (bucket) {
-            SignalBucket.WEAK -> Color(0xFFC62828)
-            SignalBucket.MEDIUM -> Color(0xFFF9A825)
-            SignalBucket.STRONG -> Color(0xFF2E7D32)
+    fun colorFor(
+        bucket: SignalBucket,
+        colorScale: ColorScalePreference
+    ): Color {
+        return when (colorScale) {
+            ColorScalePreference.VIRIDIS -> when (bucket) {
+                SignalBucket.WEAK -> Color(0xFF424242)  // dark grey
+                SignalBucket.MEDIUM -> Color(0xFFFFB300) // amber
+                SignalBucket.STRONG -> Color(0xFFFFC107) // yellow accent
+            }
+            ColorScalePreference.TURBO -> when (bucket) {
+                SignalBucket.WEAK -> Color(0xFFEF5350)  // red
+                SignalBucket.MEDIUM -> Color(0xFFFFCA28) // warm yellow
+                SignalBucket.STRONG -> Color(0xFFFFF176) // soft bright yellow
+            }
+            ColorScalePreference.GRAYSCALE -> when (bucket) {
+                SignalBucket.WEAK -> Color(0xFF616161)
+                SignalBucket.MEDIUM -> Color(0xFFBDBDBD)
+                SignalBucket.STRONG -> Color(0xFFFFFFFF)
+            }
         }
     }
 
-    fun heatmapColorFor(bucket: SignalBucket): Color {
-        return colorFor(bucket).copy(alpha = 0.28f)
+    fun heatmapColorFor(
+        bucket: SignalBucket,
+        colorScale: ColorScalePreference
+    ): Color {
+        return colorFor(bucket, colorScale).copy(alpha = 0.32f)
     }
 
     private fun mapPoint(

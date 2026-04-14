@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.ui.theme.OnDark
+import com.example.signalsketch.ui.theme.SurfaceDark
 import com.example.signalsketch.viewmodel.SettingsUiState
 import com.example.signalsketch.viewmodel.SettingsViewModel
 
@@ -56,7 +59,14 @@ private fun SettingsScreen(
         )
 
         if (uiState.isLoading) {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = SurfaceDark,
+                    contentColor = OnDark
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -106,7 +116,12 @@ private fun PreferenceCard(
             .fillMaxWidth()
             .semantics {
                 contentDescription = "$title. Current value $value."
-            }
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
