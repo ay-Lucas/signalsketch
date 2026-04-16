@@ -19,7 +19,8 @@ object ScanSessionRepositoryFactory {
             database = database,
             scanSessionDao = database.scanSessionDao(),
             wifiSampleDao = database.wifiSampleDao(),
-            pathPointDao = database.pathPointDao()
+            pathPointDao = database.pathPointDao(),
+            floorplanRoomBoxDao = database.floorplanRoomBoxDao()
         )
     }
 }

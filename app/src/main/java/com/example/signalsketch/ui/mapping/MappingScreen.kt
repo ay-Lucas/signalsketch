@@ -1,24 +1,37 @@
 package com.example.signalsketch.ui.mapping
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.signalsketch.ui.theme.OnDark
 import com.example.signalsketch.ui.theme.SurfaceDark
+import com.example.signalsketch.viewmodel.FloorplanRoomBox
 import com.example.signalsketch.position.PositionSourceType
 import com.example.signalsketch.position.TrackingQuality
 import com.example.signalsketch.sensors.MotionTrackingState
@@ -35,7 +48,13 @@ fun MappingScreen(viewModel: MappingSessionViewModel) {
         onPauseSession = viewModel::pauseSession,
         onResumeSession = viewModel::resumeSession,
         onSaveSession = viewModel::saveSession,
-        onResetSession = viewModel::resetSession
+        onResetSession = viewModel::resetSession,
+        onAddFloorplanBox = viewModel::addFloorplanBox,
+        onUpdateFloorplanBoxLabel = viewModel::updateFloorplanBoxLabel,
+        onUpdateFloorplanBoxWidth = viewModel::updateFloorplanBoxWidth,
+        onUpdateFloorplanBoxHeight = viewModel::updateFloorplanBoxHeight,
+        onUpdateFloorplanBoxPosition = viewModel::updateFloorplanBoxPosition,
+        onRemoveFloorplanBox = viewModel::removeFloorplanBox
     )
 }
 
@@ -46,12 +65,19 @@ private fun MappingScreen(
     onPauseSession: () -> Unit,
     onResumeSession: () -> Unit,
     onSaveSession: () -> Unit,
-    onResetSession: () -> Unit
+    onResetSession: () -> Unit,
+    onAddFloorplanBox: (String) -> Unit,
+    onUpdateFloorplanBoxLabel: (Long, String) -> Unit,
+    onUpdateFloorplanBoxWidth: (Long, Float) -> Unit,
+    onUpdateFloorplanBoxHeight: (Long, Float) -> Unit,
+    onUpdateFloorplanBoxPosition: (Long, Float, Float) -> Unit,
+    onRemoveFloorplanBox: (Long) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
@@ -73,9 +99,217 @@ private fun MappingScreen(
         SessionMapCard(
             pathSamples = state.pathSamples,
             wifiSamples = state.wifiSamples,
+            roomBoxes = state.floorplanBoxes,
             emptyMessage = "Start a session to render the walked path and Wi-Fi samples."
         )
+        FloorplanBuilderCard(
+            boxes = state.floorplanBoxes,
+            onAddBox = onAddFloorplanBox,
+            onUpdateBoxLabel = onUpdateFloorplanBoxLabel,
+            onUpdateBoxWidth = onUpdateFloorplanBoxWidth,
+            onUpdateBoxHeight = onUpdateFloorplanBoxHeight,
+            onUpdateBoxPosition = onUpdateFloorplanBoxPosition,
+            onRemoveBox = onRemoveFloorplanBox
+        )
         MotionDebugCard(state = state)
+    }
+}
+
+@Composable
+private fun FloorplanBuilderCard(
+    boxes: List<FloorplanRoomBox>,
+    onAddBox: (String) -> Unit,
+    onUpdateBoxLabel: (Long, String) -> Unit,
+    onUpdateBoxWidth: (Long, Float) -> Unit,
+    onUpdateBoxHeight: (Long, Float) -> Unit,
+    onUpdateBoxPosition: (Long, Float, Float) -> Unit,
+    onRemoveBox: (Long) -> Unit
+) {
+    var newLabel by remember { mutableStateOf("") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceDark,
+            contentColor = OnDark
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Floorplan Builder",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Add labeled room boxes over the live heatmap. Boxes are centered on your latest tracked position.",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = newLabel,
+                    onValueChange = { newLabel = it },
+                    label = { Text("Room label") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        onAddBox(newLabel)
+                        newLabel = ""
+                    }
+                ) {
+                    Text("Add")
+                }
+            }
+
+            if (boxes.isEmpty()) {
+                Text(
+                    text = "No room boxes yet.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 340.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    boxes.forEachIndexed { index, box ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = androidx.compose.ui.graphics.Color(box.colorArgb).copy(alpha = 0.75f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .background(
+                                                color = androidx.compose.ui.graphics.Color(box.colorArgb),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                    Text(
+                                        text = "Room ${index + 1}",
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = box.label,
+                                    onValueChange = { onUpdateBoxLabel(box.id, it) },
+                                    label = { Text("Label") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedButton(onClick = { onRemoveBox(box.id) }) {
+                                    Text("Remove")
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                NumericStepper(
+                                    label = "Width (m)",
+                                    value = box.widthMeters,
+                                    onDecrease = { onUpdateBoxWidth(box.id, box.widthMeters - 1f) },
+                                    onIncrease = { onUpdateBoxWidth(box.id, box.widthMeters + 1f) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                NumericStepper(
+                                    label = "Height (m)",
+                                    value = box.heightMeters,
+                                    onDecrease = { onUpdateBoxHeight(box.id, box.heightMeters - 1f) },
+                                    onIncrease = { onUpdateBoxHeight(box.id, box.heightMeters + 1f) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                NumericStepper(
+                                    label = "X (m)",
+                                    value = box.centerXMeters,
+                                    onDecrease = { onUpdateBoxPosition(box.id, box.centerXMeters - 1f, box.centerYMeters) },
+                                    onIncrease = { onUpdateBoxPosition(box.id, box.centerXMeters + 1f, box.centerYMeters) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                NumericStepper(
+                                    label = "Y (m)",
+                                    value = box.centerYMeters,
+                                    onDecrease = { onUpdateBoxPosition(box.id, box.centerXMeters, box.centerYMeters - 1f) },
+                                    onIncrease = { onUpdateBoxPosition(box.id, box.centerXMeters, box.centerYMeters + 1f) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NumericStepper(
+    label: String,
+    value: Float,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "$label: ${value.format(1)}",
+            style = MaterialTheme.typography.labelMedium
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onDecrease,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("-")
+            }
+            OutlinedButton(
+                onClick = onIncrease,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("+")
+            }
+        }
     }
 }
 

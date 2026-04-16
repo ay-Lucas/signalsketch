@@ -29,6 +29,13 @@ data class MapPoint(
     val bucket: SignalBucket
 )
 
+data class MapProjection(
+    val minX: Float,
+    val maxY: Float,
+    val scale: Float,
+    val center: Offset
+)
+
 data class HeatmapCell(
     val rect: Rect,
     val bucket: SignalBucket,
@@ -44,6 +51,50 @@ data class MapRenderModel(
 )
 
 class HeatmapRenderer {
+    fun buildProjection(
+        canvasSize: Size,
+        pathSamples: List<RecordedPathSample>,
+        wifiSamples: List<RecordedWifiSample>,
+        viewport: MapViewportState
+    ): MapProjection {
+        val allX = pathSamples.map { it.xMeters } + wifiSamples.map { it.xMeters }
+        val allY = pathSamples.map { it.yMeters } + wifiSamples.map { it.yMeters }
+        val minX = allX.minOrNull() ?: -1f
+        val maxX = allX.maxOrNull() ?: 1f
+        val minY = allY.minOrNull() ?: -1f
+        val maxY = allY.maxOrNull() ?: 1f
+        val width = max(maxX - minX, 1f)
+        val height = max(maxY - minY, 1f)
+        val padding = 40f
+        val drawableWidth = max(canvasSize.width - padding * 2f, 1f)
+        val drawableHeight = max(canvasSize.height - padding * 2f, 1f)
+        val scaleToFit = min(drawableWidth / width, drawableHeight / height)
+        val scale = scaleToFit * viewport.scale
+        val baseCenter = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+        val center = Offset(
+            x = baseCenter.x + viewport.offsetX,
+            y = baseCenter.y + viewport.offsetY
+        )
+
+        return MapProjection(
+            minX = minX,
+            maxY = maxY,
+            scale = scale,
+            center = center
+        )
+    }
+
+    fun projectPoint(
+        xMeters: Float,
+        yMeters: Float,
+        projection: MapProjection
+    ): Offset {
+        return Offset(
+            x = projection.center.x + (xMeters - projection.minX) * projection.scale - projection.scale / 2f,
+            y = projection.center.y - (projection.maxY - yMeters) * projection.scale + projection.scale / 2f
+        )
+    }
+
     fun buildRenderModel(
         canvasSize: Size,
         pathSamples: List<RecordedPathSample>,
@@ -59,29 +110,22 @@ class HeatmapRenderer {
             )
         }
 
+        val projection = buildProjection(
+            canvasSize = canvasSize,
+            pathSamples = pathSamples,
+            wifiSamples = wifiSamples,
+            viewport = viewport
+        )
         val allX = pathSamples.map { it.xMeters } + wifiSamples.map { it.xMeters }
         val allY = pathSamples.map { it.yMeters } + wifiSamples.map { it.yMeters }
         val minX = allX.minOrNull() ?: -1f
         val maxX = allX.maxOrNull() ?: 1f
         val minY = allY.minOrNull() ?: -1f
         val maxY = allY.maxOrNull() ?: 1f
-        val width = max(maxX - minX, 1f)
-        val height = max(maxY - minY, 1f)
-        val padding = 40f
-        val drawableWidth = max(canvasSize.width - padding * 2f, 1f)
-        val drawableHeight = max(canvasSize.height - padding * 2f, 1f)
-        val scaleToFit = min(drawableWidth / width, drawableHeight / height)
-        val scale = scaleToFit * viewport.scale
-
-        val baseCenter = Offset(canvasSize.width / 2f, canvasSize.height / 2f)
-        val center = Offset(
-            x = baseCenter.x + viewport.offsetX,
-            y = baseCenter.y + viewport.offsetY
-        )
 
         return MapRenderModel(
             path = pathSamples.map { sample ->
-                mapPoint(sample.xMeters, sample.yMeters, minX, maxY, scale, center)
+                projectPoint(sample.xMeters, sample.yMeters, projection)
             },
             heatmapCells = buildHeatmapCells(
                 wifiSamples = wifiSamples,
@@ -89,16 +133,16 @@ class HeatmapRenderer {
                 maxX = maxX,
                 minY = minY,
                 maxY = maxY,
-                scale = scale,
-                center = center
+                scale = projection.scale,
+                center = projection.center
             ),
             wifiPoints = wifiSamples.map { sample ->
                 MapPoint(
-                    offset = mapPoint(sample.xMeters, sample.yMeters, minX, maxY, scale, center),
+                    offset = projectPoint(sample.xMeters, sample.yMeters, projection),
                     bucket = sample.rssiDbm.toSignalBucket()
                 )
             },
-            center = center
+            center = projection.center
         )
     }
 

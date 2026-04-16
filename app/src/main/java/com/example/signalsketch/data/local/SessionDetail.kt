@@ -15,5 +15,10 @@ data class SessionDetail(
         parentColumn = "session_id",
         entityColumn = "session_id"
     )
-    val pathPoints: List<PathPointEntity>
+    val pathPoints: List<PathPointEntity>,
+    @Relation(
+        parentColumn = "session_id",
+        entityColumn = "session_id"
+    )
+    val floorplanBoxes: List<FloorplanRoomBoxEntity>
 )

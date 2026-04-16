@@ -12,7 +12,17 @@ data class RecordedSessionPayload(
     val status: SavedSessionStatus,
     val notes: String? = null,
     val pathPoints: List<RecordedPathPointPayload> = emptyList(),
-    val wifiSamples: List<RecordedWifiSamplePayload> = emptyList()
+    val wifiSamples: List<RecordedWifiSamplePayload> = emptyList(),
+    val floorplanBoxes: List<RecordedFloorplanBoxPayload> = emptyList()
+)
+
+data class RecordedFloorplanBoxPayload(
+    val label: String,
+    val centerXMeters: Float,
+    val centerYMeters: Float,
+    val widthMeters: Float,
+    val heightMeters: Float,
+    val colorArgb: Int
 )
 
 data class RecordedPathPointPayload(
@@ -69,5 +79,16 @@ data class SavedSessionSummary(
 data class SavedSessionDetail(
     val summary: SavedSessionSummary,
     val pathPoints: List<SavedPathPoint>,
-    val wifiSamples: List<SavedWifiSample>
+    val wifiSamples: List<SavedWifiSample>,
+    val floorplanBoxes: List<SavedFloorplanBox> = emptyList()
+)
+
+data class SavedFloorplanBox(
+    val boxId: Long,
+    val label: String,
+    val centerXMeters: Float,
+    val centerYMeters: Float,
+    val widthMeters: Float,
+    val heightMeters: Float,
+    val colorArgb: Int
 )

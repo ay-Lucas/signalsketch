@@ -23,8 +23,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -34,13 +36,17 @@ import com.example.signalsketch.data.repo.ColorScalePreference
 import com.example.signalsketch.data.repo.DataStoreAppPreferencesRepository
 import com.example.signalsketch.storage.appPreferencesDataStore
 import kotlinx.coroutines.flow.map
+import com.example.signalsketch.viewmodel.FloorplanRoomBox
 import com.example.signalsketch.viewmodel.RecordedPathSample
 import com.example.signalsketch.viewmodel.RecordedWifiSample
+import kotlin.math.max
+import kotlin.math.min
 
 @Composable
 fun SessionMapCard(
     pathSamples: List<RecordedPathSample>,
     wifiSamples: List<RecordedWifiSample>,
+    roomBoxes: List<FloorplanRoomBox> = emptyList(),
     emptyMessage: String,
     modifier: Modifier = Modifier,
     title: String = "Map View",
@@ -97,6 +103,12 @@ fun SessionMapCard(
                         wifiSamples = wifiSamples,
                         viewport = viewport
                     )
+                    val projection = renderer.buildProjection(
+                        canvasSize = size,
+                        pathSamples = pathSamples,
+                        wifiSamples = wifiSamples,
+                        viewport = viewport
+                    )
 
                     drawLine(
                         color = Color(0xFF424242),
@@ -139,6 +151,55 @@ fun SessionMapCard(
                             color = renderer.colorFor(point.bucket, colorScale),
                             radius = 7f,
                             center = point.offset
+                        )
+                    }
+
+                    val labelPaint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.WHITE
+                        textSize = 28f
+                        isAntiAlias = true
+                        typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+                    }
+
+                    roomBoxes.forEach { box ->
+                        val topLeft = renderer.projectPoint(
+                            xMeters = box.centerXMeters - box.widthMeters / 2f,
+                            yMeters = box.centerYMeters + box.heightMeters / 2f,
+                            projection = projection
+                        )
+                        val bottomRight = renderer.projectPoint(
+                            xMeters = box.centerXMeters + box.widthMeters / 2f,
+                            yMeters = box.centerYMeters - box.heightMeters / 2f,
+                            projection = projection
+                        )
+                        val boxColor = Color(box.colorArgb)
+                        val left = min(topLeft.x, bottomRight.x)
+                        val top = min(topLeft.y, bottomRight.y)
+                        val right = max(topLeft.x, bottomRight.x)
+                        val bottom = max(topLeft.y, bottomRight.y)
+                        val rectTopLeft = Offset(left, top)
+                        val rectSize = Size(
+                            width = right - left,
+                            height = bottom - top
+                        )
+
+                        drawRect(
+                            color = boxColor.copy(alpha = 0.22f),
+                            topLeft = rectTopLeft,
+                            size = rectSize
+                        )
+                        drawRect(
+                            color = boxColor,
+                            topLeft = rectTopLeft,
+                            size = rectSize,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f)
+                        )
+
+                        drawContext.canvas.nativeCanvas.drawText(
+                            box.label,
+                            rectTopLeft.x + 10f,
+                            rectTopLeft.y + 30f,
+                            labelPaint
                         )
                     }
                 }

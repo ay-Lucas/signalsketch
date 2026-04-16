@@ -32,6 +32,16 @@ data class RecordedWifiSample(
     val recordedAtEpochMillis: Long
 )
 
+data class FloorplanRoomBox(
+    val id: Long,
+    val label: String,
+    val centerXMeters: Float,
+    val centerYMeters: Float,
+    val widthMeters: Float,
+    val heightMeters: Float,
+    val colorArgb: Int
+)
+
 data class MappingSessionUiState(
     val sessionState: RecordingSessionState = RecordingSessionState.IDLE,
     val sessionId: Long? = null,
@@ -51,7 +61,8 @@ data class MappingSessionUiState(
     val lastPathCaptureAtEpochMillis: Long? = null,
     val statusMessage: String? = null,
     val pathSamples: List<RecordedPathSample> = emptyList(),
-    val wifiSamples: List<RecordedWifiSample> = emptyList()
+    val wifiSamples: List<RecordedWifiSample> = emptyList(),
+    val floorplanBoxes: List<FloorplanRoomBox> = emptyList()
 ) {
     val canStart: Boolean
         get() = sessionState == RecordingSessionState.IDLE
@@ -63,7 +74,7 @@ data class MappingSessionUiState(
         get() = sessionState == RecordingSessionState.PAUSED
 
     val canSave: Boolean
-        get() = sessionState != RecordingSessionState.IDLE && (wifiSampleCount > 0 || pathSampleCount > 0)
+        get() = sessionState != RecordingSessionState.IDLE || floorplanBoxes.isNotEmpty()
 
     val canReset: Boolean
         get() = sessionState != RecordingSessionState.IDLE || wifiSampleCount > 0 || pathSampleCount > 0

@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import com.example.signalsketch.data.local.AppDatabase
 import com.example.signalsketch.data.local.PathPointDao
 import com.example.signalsketch.data.local.PathPointEntity
+import com.example.signalsketch.data.local.FloorplanRoomBoxDao
+import com.example.signalsketch.data.local.FloorplanRoomBoxEntity
 import com.example.signalsketch.data.local.ScanSessionDao
 import com.example.signalsketch.data.local.ScanSessionEntity
 import com.example.signalsketch.data.local.ScanSessionSummaryRecord
@@ -17,7 +19,8 @@ class RoomScanSessionRepository(
     private val database: AppDatabase,
     private val scanSessionDao: ScanSessionDao,
     private val wifiSampleDao: WifiSampleDao,
-    private val pathPointDao: PathPointDao
+    private val pathPointDao: PathPointDao,
+    private val floorplanRoomBoxDao: FloorplanRoomBoxDao
 ) : ScanSessionRepository {
     override fun observeSessions(): Flow<List<SavedSessionSummary>> {
         return scanSessionDao.observeSessions().map { sessions ->
@@ -84,6 +87,22 @@ class RoomScanSessionRepository(
                 )
             }
 
+            if (session.floorplanBoxes.isNotEmpty()) {
+                floorplanRoomBoxDao.insertBoxes(
+                    session.floorplanBoxes.map { box ->
+                        FloorplanRoomBoxEntity(
+                            sessionId = sessionId,
+                            label = box.label,
+                            centerXMeters = box.centerXMeters,
+                            centerYMeters = box.centerYMeters,
+                            widthMeters = box.widthMeters,
+                            heightMeters = box.heightMeters,
+                            colorArgb = box.colorArgb
+                        )
+                    }
+                )
+            }
+
             sessionId
         }
     }
@@ -135,6 +154,17 @@ private fun SessionDetail.toSavedSessionDetail(): SavedSessionDetail {
                 yMeters = sample.yMeters,
                 headingDegrees = sample.headingDegrees,
                 pathPointId = sample.pathPointId
+            )
+        },
+        floorplanBoxes = floorplanBoxes.map { box ->
+            SavedFloorplanBox(
+                boxId = box.boxId,
+                label = box.label,
+                centerXMeters = box.centerXMeters,
+                centerYMeters = box.centerYMeters,
+                widthMeters = box.widthMeters,
+                heightMeters = box.heightMeters,
+                colorArgb = box.colorArgb
             )
         }
     )

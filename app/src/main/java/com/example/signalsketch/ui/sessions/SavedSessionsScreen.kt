@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -133,7 +135,12 @@ private fun SavedSessionsScreen(
                 )
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 items(uiState.sessions, key = { it.sessionId }) { session ->
                     SessionCard(
                         session = session,
@@ -155,7 +162,8 @@ private fun SavedSessionDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         OutlinedButton(
@@ -235,6 +243,7 @@ private fun SavedSessionDetailScreen(
                 SessionMapCard(
                     pathSamples = uiState.pathSamples,
                     wifiSamples = uiState.wifiSamples,
+                    roomBoxes = uiState.floorplanBoxes,
                     emptyMessage = "This saved session does not include map samples."
                 )
 

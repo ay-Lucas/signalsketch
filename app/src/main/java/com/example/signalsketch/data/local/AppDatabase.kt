@@ -11,12 +11,14 @@ import com.example.signalsketch.data.repo.SavedSessionStatus
     entities = [
         ScanSessionEntity::class,
         WifiSampleEntity::class,
-        PathPointEntity::class
+        PathPointEntity::class,
+        FloorplanRoomBoxEntity::class
     ],
-    version = 3,
+    version = 4,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
-        AutoMigration(from = 2, to = 3)
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4)
     ],
     exportSchema = true
 )
@@ -25,6 +27,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun scanSessionDao(): ScanSessionDao
     abstract fun wifiSampleDao(): WifiSampleDao
     abstract fun pathPointDao(): PathPointDao
+    abstract fun floorplanRoomBoxDao(): FloorplanRoomBoxDao
 }
 
 class RoomConverters {

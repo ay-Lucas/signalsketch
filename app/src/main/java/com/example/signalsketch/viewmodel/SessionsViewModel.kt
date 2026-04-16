@@ -43,6 +43,7 @@ data class SavedSessionDetailUiState(
     val notes: String? = null,
     val pathSamples: List<RecordedPathSample> = emptyList(),
     val wifiSamples: List<RecordedWifiSample> = emptyList(),
+    val floorplanBoxes: List<FloorplanRoomBox> = emptyList(),
     val isLoading: Boolean = true,
     val canDelete: Boolean = false,
     val isDeleted: Boolean = false,
@@ -181,6 +182,17 @@ private fun SavedSessionDetail.toUiState(isExporting: Boolean): SavedSessionDeta
                 headingDegrees = sample.headingDegrees ?: 0f,
                 pathSampleIndex = null,
                 recordedAtEpochMillis = sample.sampledAtEpochMillis
+            )
+        },
+        floorplanBoxes = floorplanBoxes.map { box ->
+            FloorplanRoomBox(
+                id = box.boxId,
+                label = box.label,
+                centerXMeters = box.centerXMeters,
+                centerYMeters = box.centerYMeters,
+                widthMeters = box.widthMeters,
+                heightMeters = box.heightMeters,
+                colorArgb = box.colorArgb
             )
         },
         isLoading = false,

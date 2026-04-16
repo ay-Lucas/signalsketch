@@ -5,12 +5,19 @@ import androidx.room.Room
 
 object DatabaseFactory {
     private const val DATABASE_NAME = "signal_sketch.db"
+    @Volatile
+    private var instance: AppDatabase? = null
 
     fun create(context: Context): AppDatabase {
-        return Room.databaseBuilder(
-            context = context.applicationContext,
-            klass = AppDatabase::class.java,
-            name = DATABASE_NAME
-        ).build()
+        return instance ?: synchronized(this) {
+            instance ?: Room.databaseBuilder(
+                context = context.applicationContext,
+                klass = AppDatabase::class.java,
+                name = DATABASE_NAME
+            )
+                .enableMultiInstanceInvalidation()
+                .build()
+                .also { instance = it }
+        }
     }
 }

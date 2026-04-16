@@ -3,7 +3,9 @@ package com.example.signalsketch.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.graphics.Color as AndroidColor
 import com.example.signalsketch.data.repo.RecordedPathPointPayload
+import com.example.signalsketch.data.repo.RecordedFloorplanBoxPayload
 import com.example.signalsketch.data.repo.RecordedSessionPayload
 import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
 import com.example.signalsketch.data.repo.SavedSessionStatus
@@ -117,6 +119,97 @@ class MappingSessionViewModel(
                 }
             )
         }
+    }
+
+    fun addFloorplanBox(label: String) {
+        val normalized = label.trim().ifBlank { "Room ${sessionState.value.floorplanBoxes.size + 1}" }
+        sessionState.update { current ->
+            val centerX = current.pathSamples.lastOrNull()?.xMeters ?: current.latestX
+            val centerY = current.pathSamples.lastOrNull()?.yMeters ?: current.latestY
+            val colorArgb = roomBoxColorForIndex(current.nextFloorplanColorIndex)
+            val offset = roomBoxOffsetForIndex(current.floorplanBoxes.size)
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes + FloorplanRoomBox(
+                    id = System.currentTimeMillis() + current.floorplanBoxes.size,
+                    label = normalized,
+                    centerXMeters = centerX + offset.first,
+                    centerYMeters = centerY + offset.second,
+                    widthMeters = 3.2f,
+                    heightMeters = 3.2f,
+                    colorArgb = colorArgb
+                ),
+                nextFloorplanColorIndex = current.nextFloorplanColorIndex + 1
+            )
+        }
+    }
+
+    fun updateFloorplanBoxLabel(boxId: Long, label: String) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) box.copy(label = label.trim().ifBlank { box.label }) else box
+                }
+            )
+        }
+    }
+
+    fun removeFloorplanBox(boxId: Long) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.filterNot { it.id == boxId }
+            )
+        }
+    }
+
+    fun updateFloorplanBoxWidth(boxId: Long, widthMeters: Float) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) box.copy(widthMeters = widthMeters.coerceAtLeast(0.5f)) else box
+                }
+            )
+        }
+    }
+
+    fun updateFloorplanBoxHeight(boxId: Long, heightMeters: Float) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) box.copy(heightMeters = heightMeters.coerceAtLeast(0.5f)) else box
+                }
+            )
+        }
+    }
+
+    fun updateFloorplanBoxPosition(boxId: Long, centerXMeters: Float, centerYMeters: Float) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) {
+                        box.copy(centerXMeters = centerXMeters, centerYMeters = centerYMeters)
+                    } else {
+                        box
+                    }
+                }
+            )
+        }
+    }
+
+    private fun roomBoxOffsetForIndex(index: Int): Pair<Float, Float> {
+        val spacing = 1.8f
+        return when (index % 6) {
+            0 -> 0f to 0f
+            1 -> spacing to 0f
+            2 -> -spacing to 0f
+            3 -> 0f to spacing
+            4 -> 0f to -spacing
+            else -> spacing to spacing
+        }
+    }
+
+    private fun roomBoxColorForIndex(index: Int): Int {
+        val hue = (index * 137.508f) % 360f
+        return AndroidColor.HSVToColor(floatArrayOf(hue, 0.6f, 0.95f))
     }
 
     override fun onCleared() {
@@ -253,7 +346,8 @@ class MappingSessionViewModel(
             lastPathCaptureAtEpochMillis = session.lastPathCaptureAtEpochMillis,
             statusMessage = statusMessage,
             pathSamples = session.pathSamples,
-            wifiSamples = session.wifiSamples
+            wifiSamples = session.wifiSamples,
+            floorplanBoxes = session.floorplanBoxes
         )
     }
 
@@ -283,20 +377,22 @@ class MappingSessionViewModel(
 }
 
 private fun SessionRecordingState.toRecordedSessionPayload(): RecordedSessionPayload? {
-    val sessionId = sessionId ?: return null
-    val startedAt = sessionStartedAtEpochMillis ?: return null
-    if (pathSamples.isEmpty() && wifiSamples.isEmpty()) {
+    val hasContent = pathSamples.isNotEmpty() || wifiSamples.isNotEmpty() || floorplanBoxes.isNotEmpty()
+    if (!hasContent) {
         return null
     }
 
+    val startedAt = sessionStartedAtEpochMillis ?: System.currentTimeMillis()
+    val sessionName = sessionId?.let { "Mapping Session $it" } ?: "Floorplan Session"
+
     return RecordedSessionPayload(
-        name = "Mapping Session $sessionId",
+        name = sessionName,
         startedAtEpochMillis = startedAt,
         endedAtEpochMillis = if (lifecycleState == RecordingSessionState.PAUSED) null else System.currentTimeMillis(),
         status = when (lifecycleState) {
             RecordingSessionState.PAUSED -> SavedSessionStatus.PAUSED
             RecordingSessionState.ACTIVE -> SavedSessionStatus.COMPLETED
-            RecordingSessionState.IDLE -> return null
+            RecordingSessionState.IDLE -> SavedSessionStatus.COMPLETED
         },
         notes = "Source: 2D mapping",
         pathPoints = pathSamples.map { sample ->
@@ -319,6 +415,16 @@ private fun SessionRecordingState.toRecordedSessionPayload(): RecordedSessionPay
                 headingDegrees = sample.headingDegrees,
                 pathPointIndex = sample.pathSampleIndex
             )
+        },
+        floorplanBoxes = floorplanBoxes.map { box ->
+            RecordedFloorplanBoxPayload(
+                label = box.label,
+                centerXMeters = box.centerXMeters,
+                centerYMeters = box.centerYMeters,
+                widthMeters = box.widthMeters,
+                heightMeters = box.heightMeters,
+                colorArgb = box.colorArgb
+            )
         }
     )
 }
@@ -336,7 +442,9 @@ private data class SessionRecordingState(
     val lastPositionSourceType: PositionSourceType = PositionSourceType.NONE,
     val lastWifiCaptureAtEpochMillis: Long? = null,
     val lastPathCaptureAtEpochMillis: Long? = null,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val floorplanBoxes: List<FloorplanRoomBox> = emptyList(),
+    val nextFloorplanColorIndex: Int = 0
 ) {
     val latestX: Float
         get() = pathSamples.lastOrNull()?.xMeters ?: 0f
