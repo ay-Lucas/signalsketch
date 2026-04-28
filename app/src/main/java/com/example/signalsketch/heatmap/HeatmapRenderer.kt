@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import com.example.signalsketch.data.repo.ColorScalePreference
+import com.example.signalsketch.viewmodel.FloorplanRoomBox
 import com.example.signalsketch.viewmodel.RecordedPathSample
 import com.example.signalsketch.viewmodel.RecordedWifiSample
 import kotlin.math.ceil
@@ -30,8 +31,8 @@ data class MapPoint(
 )
 
 data class MapProjection(
-    val minX: Float,
-    val maxY: Float,
+    val worldCenterX: Float,
+    val worldCenterY: Float,
     val scale: Float,
     val center: Offset
 )
@@ -55,16 +56,12 @@ class HeatmapRenderer {
         canvasSize: Size,
         pathSamples: List<RecordedPathSample>,
         wifiSamples: List<RecordedWifiSample>,
+        roomBoxes: List<FloorplanRoomBox> = emptyList(),
         viewport: MapViewportState
     ): MapProjection {
-        val allX = pathSamples.map { it.xMeters } + wifiSamples.map { it.xMeters }
-        val allY = pathSamples.map { it.yMeters } + wifiSamples.map { it.yMeters }
-        val minX = allX.minOrNull() ?: -1f
-        val maxX = allX.maxOrNull() ?: 1f
-        val minY = allY.minOrNull() ?: -1f
-        val maxY = allY.maxOrNull() ?: 1f
-        val width = max(maxX - minX, 1f)
-        val height = max(maxY - minY, 1f)
+        val bounds = resolveBounds(pathSamples, wifiSamples, roomBoxes)
+        val width = max(bounds.maxX - bounds.minX, 1f)
+        val height = max(bounds.maxY - bounds.minY, 1f)
         val padding = 40f
         val drawableWidth = max(canvasSize.width - padding * 2f, 1f)
         val drawableHeight = max(canvasSize.height - padding * 2f, 1f)
@@ -77,8 +74,8 @@ class HeatmapRenderer {
         )
 
         return MapProjection(
-            minX = minX,
-            maxY = maxY,
+            worldCenterX = (bounds.minX + bounds.maxX) / 2f,
+            worldCenterY = (bounds.minY + bounds.maxY) / 2f,
             scale = scale,
             center = center
         )
@@ -90,8 +87,18 @@ class HeatmapRenderer {
         projection: MapProjection
     ): Offset {
         return Offset(
-            x = projection.center.x + (xMeters - projection.minX) * projection.scale - projection.scale / 2f,
-            y = projection.center.y - (projection.maxY - yMeters) * projection.scale + projection.scale / 2f
+            x = projection.center.x + (xMeters - projection.worldCenterX) * projection.scale,
+            y = projection.center.y - (yMeters - projection.worldCenterY) * projection.scale
+        )
+    }
+
+    fun unprojectPoint(
+        point: Offset,
+        projection: MapProjection
+    ): Offset {
+        return Offset(
+            x = ((point.x - projection.center.x) / projection.scale) + projection.worldCenterX,
+            y = projection.worldCenterY - ((point.y - projection.center.y) / projection.scale)
         )
     }
 
@@ -99,6 +106,7 @@ class HeatmapRenderer {
         canvasSize: Size,
         pathSamples: List<RecordedPathSample>,
         wifiSamples: List<RecordedWifiSample>,
+        roomBoxes: List<FloorplanRoomBox> = emptyList(),
         viewport: MapViewportState
     ): MapRenderModel {
         if (canvasSize.width <= 0f || canvasSize.height <= 0f) {
@@ -114,14 +122,10 @@ class HeatmapRenderer {
             canvasSize = canvasSize,
             pathSamples = pathSamples,
             wifiSamples = wifiSamples,
+            roomBoxes = roomBoxes,
             viewport = viewport
         )
-        val allX = pathSamples.map { it.xMeters } + wifiSamples.map { it.xMeters }
-        val allY = pathSamples.map { it.yMeters } + wifiSamples.map { it.yMeters }
-        val minX = allX.minOrNull() ?: -1f
-        val maxX = allX.maxOrNull() ?: 1f
-        val minY = allY.minOrNull() ?: -1f
-        val maxY = allY.maxOrNull() ?: 1f
+        val bounds = resolveBounds(pathSamples, wifiSamples, roomBoxes)
 
         return MapRenderModel(
             path = pathSamples.map { sample ->
@@ -129,10 +133,10 @@ class HeatmapRenderer {
             },
             heatmapCells = buildHeatmapCells(
                 wifiSamples = wifiSamples,
-                minX = minX,
-                maxX = maxX,
-                minY = minY,
-                maxY = maxY,
+                minX = bounds.minX,
+                maxX = bounds.maxX,
+                minY = bounds.minY,
+                maxY = bounds.maxY,
                 scale = projection.scale,
                 center = projection.center
             ),
@@ -179,14 +183,14 @@ class HeatmapRenderer {
     private fun mapPoint(
         xMeters: Float,
         yMeters: Float,
-        minX: Float,
-        maxY: Float,
+        worldCenterX: Float,
+        worldCenterY: Float,
         scale: Float,
         center: Offset
     ): Offset {
         return Offset(
-            x = center.x + (xMeters - minX) * scale - scale / 2f,
-            y = center.y - (maxY - yMeters) * scale + scale / 2f
+            x = center.x + (xMeters - worldCenterX) * scale,
+            y = center.y - (yMeters - worldCenterY) * scale
         )
     }
 
@@ -203,6 +207,8 @@ class HeatmapRenderer {
             return emptyList()
         }
 
+        val worldCenterX = (minX + maxX) / 2f
+        val worldCenterY = (minY + maxY) / 2f
         val span = max(maxX - minX, maxY - minY)
         val cellSizeMeters = (span / 8f).coerceIn(0.75f, 2.5f)
         val buckets = linkedMapOf<Pair<Int, Int>, MutableList<RecordedWifiSample>>()
@@ -218,8 +224,8 @@ class HeatmapRenderer {
             val cellMinY = minY + cellKey.second * cellSizeMeters
             val cellMaxX = min(cellMinX + cellSizeMeters, maxX + cellSizeMeters * 0.5f)
             val cellMaxY = min(cellMinY + cellSizeMeters, maxY + cellSizeMeters * 0.5f)
-            val topLeft = mapPoint(cellMinX, cellMaxY, minX, maxY, scale, center)
-            val bottomRight = mapPoint(cellMaxX, cellMinY, minX, maxY, scale, center)
+            val topLeft = mapPoint(cellMinX, cellMaxY, worldCenterX, worldCenterY, scale, center)
+            val bottomRight = mapPoint(cellMaxX, cellMinY, worldCenterX, worldCenterY, scale, center)
             val averageRssi = samples.map { it.rssiDbm }.average().toFloat()
 
             HeatmapCell(
@@ -251,4 +257,39 @@ class HeatmapRenderer {
             else -> SignalBucket.WEAK
         }
     }
+
+    private fun resolveBounds(
+        pathSamples: List<RecordedPathSample>,
+        wifiSamples: List<RecordedWifiSample>,
+        roomBoxes: List<FloorplanRoomBox>
+    ): WorldBounds {
+        val trackedX = pathSamples.map { it.xMeters } + wifiSamples.map { it.xMeters }
+        val trackedY = pathSamples.map { it.yMeters } + wifiSamples.map { it.yMeters }
+        val includeRoomsOnly = trackedX.isEmpty() && trackedY.isEmpty()
+        val roomX = if (includeRoomsOnly) {
+            roomBoxes.flatMap { listOf(it.centerXMeters - it.widthMeters / 2f, it.centerXMeters + it.widthMeters / 2f) }
+        } else {
+            emptyList()
+        }
+        val roomY = if (includeRoomsOnly) {
+            roomBoxes.flatMap { listOf(it.centerYMeters - it.heightMeters / 2f, it.centerYMeters + it.heightMeters / 2f) }
+        } else {
+            emptyList()
+        }
+        val allX = trackedX + roomX
+        val allY = trackedY + roomY
+        return WorldBounds(
+            minX = allX.minOrNull() ?: -1f,
+            maxX = allX.maxOrNull() ?: 1f,
+            minY = allY.minOrNull() ?: -1f,
+            maxY = allY.maxOrNull() ?: 1f
+        )
+    }
 }
+
+private data class WorldBounds(
+    val minX: Float,
+    val maxX: Float,
+    val minY: Float,
+    val maxY: Float
+)

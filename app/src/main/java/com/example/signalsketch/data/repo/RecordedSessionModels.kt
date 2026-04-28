@@ -6,6 +6,7 @@ enum class SavedSessionStatus {
 }
 
 data class RecordedSessionPayload(
+    val existingSessionId: Long? = null,
     val name: String,
     val startedAtEpochMillis: Long,
     val endedAtEpochMillis: Long?,

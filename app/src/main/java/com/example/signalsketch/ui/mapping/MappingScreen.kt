@@ -26,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -73,6 +74,8 @@ private fun MappingScreen(
     onUpdateFloorplanBoxPosition: (Long, Float, Float) -> Unit,
     onRemoveFloorplanBox: (Long) -> Unit
 ) {
+    var selectedBoxId by rememberSaveable { mutableStateOf<Long?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -100,15 +103,21 @@ private fun MappingScreen(
             pathSamples = state.pathSamples,
             wifiSamples = state.wifiSamples,
             roomBoxes = state.floorplanBoxes,
+            selectedRoomBoxId = selectedBoxId,
+            onSelectRoomBox = { selectedBoxId = it },
+            onMoveRoomBox = onUpdateFloorplanBoxPosition,
+            onResizeRoomBox = { boxId, widthMeters, heightMeters ->
+                onUpdateFloorplanBoxWidth(boxId, widthMeters)
+                onUpdateFloorplanBoxHeight(boxId, heightMeters)
+            },
             emptyMessage = "Start a session to render the walked path and Wi-Fi samples."
         )
         FloorplanBuilderCard(
             boxes = state.floorplanBoxes,
+            selectedBoxId = selectedBoxId,
             onAddBox = onAddFloorplanBox,
             onUpdateBoxLabel = onUpdateFloorplanBoxLabel,
-            onUpdateBoxWidth = onUpdateFloorplanBoxWidth,
-            onUpdateBoxHeight = onUpdateFloorplanBoxHeight,
-            onUpdateBoxPosition = onUpdateFloorplanBoxPosition,
+            onSelectBox = { selectedBoxId = it },
             onRemoveBox = onRemoveFloorplanBox
         )
         MotionDebugCard(state = state)
@@ -118,11 +127,10 @@ private fun MappingScreen(
 @Composable
 private fun FloorplanBuilderCard(
     boxes: List<FloorplanRoomBox>,
+    selectedBoxId: Long?,
     onAddBox: (String) -> Unit,
     onUpdateBoxLabel: (Long, String) -> Unit,
-    onUpdateBoxWidth: (Long, Float) -> Unit,
-    onUpdateBoxHeight: (Long, Float) -> Unit,
-    onUpdateBoxPosition: (Long, Float, Float) -> Unit,
+    onSelectBox: (Long?) -> Unit,
     onRemoveBox: (Long) -> Unit
 ) {
     var newLabel by remember { mutableStateOf("") }
@@ -144,7 +152,7 @@ private fun FloorplanBuilderCard(
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Add labeled room boxes over the live heatmap. Boxes are centered on your latest tracked position.",
+                text = "Add labeled room boxes over the live heatmap. Tap a box on the map to select it, drag to move it, and use two fingers to resize or reposition it.",
                 style = MaterialTheme.typography.bodySmall
             )
             Row(
@@ -189,8 +197,12 @@ private fun FloorplanBuilderCard(
                                 contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                             border = BorderStroke(
-                                width = 1.dp,
-                                color = androidx.compose.ui.graphics.Color(box.colorArgb).copy(alpha = 0.75f)
+                                width = if (box.id == selectedBoxId) 2.dp else 1.dp,
+                                color = if (box.id == selectedBoxId) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    androidx.compose.ui.graphics.Color(box.colorArgb).copy(alpha = 0.75f)
+                                }
                             )
                         ) {
                             Column(
@@ -215,99 +227,32 @@ private fun FloorplanBuilderCard(
                                     )
                                 }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
                                 OutlinedTextField(
                                     value = box.label,
                                     onValueChange = { onUpdateBoxLabel(box.id, it) },
                                     label = { Text("Label") },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.fillMaxWidth(),
                                     singleLine = true
                                 )
-                                OutlinedButton(onClick = { onRemoveBox(box.id) }) {
-                                    Text("Remove")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(onClick = { onSelectBox(box.id) }) {
+                                        Text(if (box.id == selectedBoxId) "Selected" else "Select")
+                                    }
+                                    OutlinedButton(onClick = { onRemoveBox(box.id) }) {
+                                        Text("Remove")
+                                    }
                                 }
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                NumericStepper(
-                                    label = "Width (m)",
-                                    value = box.widthMeters,
-                                    onDecrease = { onUpdateBoxWidth(box.id, box.widthMeters - 1f) },
-                                    onIncrease = { onUpdateBoxWidth(box.id, box.widthMeters + 1f) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                NumericStepper(
-                                    label = "Height (m)",
-                                    value = box.heightMeters,
-                                    onDecrease = { onUpdateBoxHeight(box.id, box.heightMeters - 1f) },
-                                    onIncrease = { onUpdateBoxHeight(box.id, box.heightMeters + 1f) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                NumericStepper(
-                                    label = "X (m)",
-                                    value = box.centerXMeters,
-                                    onDecrease = { onUpdateBoxPosition(box.id, box.centerXMeters - 1f, box.centerYMeters) },
-                                    onIncrease = { onUpdateBoxPosition(box.id, box.centerXMeters + 1f, box.centerYMeters) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                NumericStepper(
-                                    label = "Y (m)",
-                                    value = box.centerYMeters,
-                                    onDecrease = { onUpdateBoxPosition(box.id, box.centerXMeters, box.centerYMeters - 1f) },
-                                    onIncrease = { onUpdateBoxPosition(box.id, box.centerXMeters, box.centerYMeters + 1f) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            }
+                            Text(
+                                text = "Size ${box.widthMeters.format(1)}m x ${box.heightMeters.format(1)}m  |  Center ${box.centerXMeters.format(1)}, ${box.centerYMeters.format(1)}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NumericStepper(
-    label: String,
-    value: Float,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(
-            text = "$label: ${value.format(1)}",
-            style = MaterialTheme.typography.labelMedium
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = onDecrease,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("-")
-            }
-            OutlinedButton(
-                onClick = onIncrease,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("+")
             }
         }
     }

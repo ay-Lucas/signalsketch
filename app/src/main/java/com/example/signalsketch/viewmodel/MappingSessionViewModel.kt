@@ -111,13 +111,18 @@ class MappingSessionViewModel(
         motionTrackingRepository.stopTracking()
         wifiRepository.stopScan()
         viewModelScope.launch {
-            scanSessionRepository.saveRecordedSession(persistedSession)
-            sessionState.value = SessionRecordingState(
-                statusMessage = when (persistedSession.status) {
-                    SavedSessionStatus.PAUSED -> "Paused session saved."
-                    SavedSessionStatus.COMPLETED -> "Completed session saved."
-                }
-            )
+            val savedSessionId = scanSessionRepository.saveRecordedSession(persistedSession)
+            sessionState.update { current ->
+                current.copy(
+                    lifecycleState = RecordingSessionState.IDLE,
+                    sessionPausedAtEpochMillis = null,
+                    savedSessionRecordId = savedSessionId,
+                    statusMessage = when (persistedSession.status) {
+                        SavedSessionStatus.PAUSED -> "Paused session saved."
+                        SavedSessionStatus.COMPLETED -> "Completed session saved."
+                    }
+                )
+            }
         }
     }
 
@@ -127,15 +132,14 @@ class MappingSessionViewModel(
             val centerX = current.pathSamples.lastOrNull()?.xMeters ?: current.latestX
             val centerY = current.pathSamples.lastOrNull()?.yMeters ?: current.latestY
             val colorArgb = roomBoxColorForIndex(current.nextFloorplanColorIndex)
-            val offset = roomBoxOffsetForIndex(current.floorplanBoxes.size)
             current.copy(
                 floorplanBoxes = current.floorplanBoxes + FloorplanRoomBox(
                     id = System.currentTimeMillis() + current.floorplanBoxes.size,
                     label = normalized,
-                    centerXMeters = centerX + offset.first,
-                    centerYMeters = centerY + offset.second,
-                    widthMeters = 3.2f,
-                    heightMeters = 3.2f,
+                    centerXMeters = centerX,
+                    centerYMeters = centerY,
+                    widthMeters = 0.8f,
+                    heightMeters = 0.8f,
                     colorArgb = colorArgb
                 ),
                 nextFloorplanColorIndex = current.nextFloorplanColorIndex + 1
@@ -165,7 +169,7 @@ class MappingSessionViewModel(
         sessionState.update { current ->
             current.copy(
                 floorplanBoxes = current.floorplanBoxes.map { box ->
-                    if (box.id == boxId) box.copy(widthMeters = widthMeters.coerceAtLeast(0.5f)) else box
+                    if (box.id == boxId) box.copy(widthMeters = widthMeters.coerceAtLeast(0.05f)) else box
                 }
             )
         }
@@ -175,7 +179,7 @@ class MappingSessionViewModel(
         sessionState.update { current ->
             current.copy(
                 floorplanBoxes = current.floorplanBoxes.map { box ->
-                    if (box.id == boxId) box.copy(heightMeters = heightMeters.coerceAtLeast(0.5f)) else box
+                    if (box.id == boxId) box.copy(heightMeters = heightMeters.coerceAtLeast(0.05f)) else box
                 }
             )
         }
@@ -192,18 +196,6 @@ class MappingSessionViewModel(
                     }
                 }
             )
-        }
-    }
-
-    private fun roomBoxOffsetForIndex(index: Int): Pair<Float, Float> {
-        val spacing = 1.8f
-        return when (index % 6) {
-            0 -> 0f to 0f
-            1 -> spacing to 0f
-            2 -> -spacing to 0f
-            3 -> 0f to spacing
-            4 -> 0f to -spacing
-            else -> spacing to spacing
         }
     }
 
@@ -386,6 +378,7 @@ private fun SessionRecordingState.toRecordedSessionPayload(): RecordedSessionPay
     val sessionName = sessionId?.let { "Mapping Session $it" } ?: "Floorplan Session"
 
     return RecordedSessionPayload(
+        existingSessionId = savedSessionRecordId,
         name = sessionName,
         startedAtEpochMillis = startedAt,
         endedAtEpochMillis = if (lifecycleState == RecordingSessionState.PAUSED) null else System.currentTimeMillis(),
@@ -444,7 +437,8 @@ private data class SessionRecordingState(
     val lastPathCaptureAtEpochMillis: Long? = null,
     val statusMessage: String? = null,
     val floorplanBoxes: List<FloorplanRoomBox> = emptyList(),
-    val nextFloorplanColorIndex: Int = 0
+    val nextFloorplanColorIndex: Int = 0,
+    val savedSessionRecordId: Long? = null
 ) {
     val latestX: Float
         get() = pathSamples.lastOrNull()?.xMeters ?: 0f

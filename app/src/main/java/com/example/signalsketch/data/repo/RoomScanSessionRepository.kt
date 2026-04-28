@@ -40,8 +40,13 @@ class RoomScanSessionRepository(
 
     override suspend fun saveRecordedSession(session: RecordedSessionPayload): Long {
         return database.withTransaction {
+            val targetSessionId = session.existingSessionId
+            if (targetSessionId != null) {
+                scanSessionDao.deleteSessionById(targetSessionId)
+            }
             val sessionId = scanSessionDao.insertSession(
                 ScanSessionEntity(
+                    sessionId = targetSessionId ?: 0,
                     name = session.name,
                     startedAtEpochMillis = session.startedAtEpochMillis,
                     endedAtEpochMillis = session.endedAtEpochMillis,
