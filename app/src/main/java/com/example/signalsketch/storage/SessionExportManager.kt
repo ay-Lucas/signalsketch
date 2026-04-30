@@ -297,7 +297,7 @@ private fun buildPreviewBitmap(
             point.offset.y,
             7f,
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = renderer.colorFor(point.bucket, colorScale).toArgb()
+                color = renderer.markerColorFor(point.bucket).toArgb()
                 style = Paint.Style.FILL
             }
         )

@@ -19,6 +19,13 @@ enum class SignalBucket {
     STRONG
 }
 
+data class SignalBucketPresentation(
+    val bucket: SignalBucket,
+    val label: String,
+    val rangeLabel: String,
+    val color: Color
+)
+
 data class MapViewportState(
     val scale: Float = 1f,
     val offsetX: Float = 0f,
@@ -52,6 +59,39 @@ data class MapRenderModel(
 )
 
 class HeatmapRenderer {
+    fun bucketForRssi(rssiDbm: Int): SignalBucket {
+        return when {
+            rssiDbm >= STRONG_SIGNAL_MIN_DBM -> SignalBucket.STRONG
+            rssiDbm >= MEDIUM_SIGNAL_MIN_DBM -> SignalBucket.MEDIUM
+            else -> SignalBucket.WEAK
+        }
+    }
+
+    fun presentationFor(bucket: SignalBucket): SignalBucketPresentation {
+        return when (bucket) {
+            SignalBucket.WEAK -> SignalBucketPresentation(
+                bucket = bucket,
+                label = "Weak",
+                rangeLabel = "< -67 dBm",
+                color = Color(0xFFC62828)
+            )
+            SignalBucket.MEDIUM -> SignalBucketPresentation(
+                bucket = bucket,
+                label = "Medium",
+                rangeLabel = "-67 to -55 dBm",
+                color = Color(0xFFF9A825)
+            )
+            SignalBucket.STRONG -> SignalBucketPresentation(
+                bucket = bucket,
+                label = "Strong",
+                rangeLabel = ">= -55 dBm",
+                color = Color(0xFF2E7D32)
+            )
+        }
+    }
+
+    fun markerColorFor(bucket: SignalBucket): Color = presentationFor(bucket).color
+
     fun buildProjection(
         canvasSize: Size,
         pathSamples: List<RecordedPathSample>,
@@ -143,7 +183,7 @@ class HeatmapRenderer {
             wifiPoints = wifiSamples.map { sample ->
                 MapPoint(
                     offset = projectPoint(sample.xMeters, sample.yMeters, projection),
-                    bucket = sample.rssiDbm.toSignalBucket()
+                    bucket = bucketForRssi(sample.rssiDbm)
                 )
             },
             center = projection.center
@@ -243,17 +283,13 @@ class HeatmapRenderer {
     }
 
     private fun Int.toSignalBucket(): SignalBucket {
-        return when {
-            this >= -55 -> SignalBucket.STRONG
-            this >= -67 -> SignalBucket.MEDIUM
-            else -> SignalBucket.WEAK
-        }
+        return bucketForRssi(this)
     }
 
     private fun Float.roundedSignalBucket(): SignalBucket {
         return when {
-            this >= -55f -> SignalBucket.STRONG
-            this >= -67f -> SignalBucket.MEDIUM
+            this >= STRONG_SIGNAL_MIN_DBM.toFloat() -> SignalBucket.STRONG
+            this >= MEDIUM_SIGNAL_MIN_DBM.toFloat() -> SignalBucket.MEDIUM
             else -> SignalBucket.WEAK
         }
     }
@@ -293,3 +329,6 @@ private data class WorldBounds(
     val minY: Float,
     val maxY: Float
 )
+
+private const val STRONG_SIGNAL_MIN_DBM = -55
+private const val MEDIUM_SIGNAL_MIN_DBM = -67

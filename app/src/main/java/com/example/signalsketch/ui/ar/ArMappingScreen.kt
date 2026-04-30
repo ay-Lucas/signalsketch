@@ -456,7 +456,10 @@ private fun PlaneIndicatorCard(
             )
             Text(text = "Anchors Placed: $anchorCount")
             Text(text = "Wi-Fi Samples Captured: $wifiSampleCount")
-            Text(text = "Marker Colors: green=strong, yellow=medium, red=weak")
+            Text(text = "Signal markers:")
+            Text(text = "Strong: >= -55 dBm", style = MaterialTheme.typography.bodySmall)
+            Text(text = "Medium: -67 to -55 dBm", style = MaterialTheme.typography.bodySmall)
+            Text(text = "Weak: < -67 dBm", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

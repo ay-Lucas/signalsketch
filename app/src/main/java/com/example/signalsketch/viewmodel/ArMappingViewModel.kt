@@ -5,6 +5,7 @@ import android.app.Application
 import android.view.MotionEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.graphics.toArgb
 import android.graphics.Color as AndroidColor
 import com.example.signalsketch.ar.ArAvailabilityRepositoryFactory
 import com.example.signalsketch.ar.ArAvailabilityState
@@ -19,6 +20,7 @@ import com.example.signalsketch.data.repo.RecordedSessionPayload
 import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
 import com.example.signalsketch.data.repo.SavedSessionStatus
 import com.example.signalsketch.data.repo.ScanSessionRepositoryFactory
+import com.example.signalsketch.heatmap.HeatmapRenderer
 import com.example.signalsketch.position.LivePositionSample
 import com.example.signalsketch.position.PositionSourceRepositoryFactory
 import com.example.signalsketch.position.PositionSourceState
@@ -96,6 +98,7 @@ class ArMappingViewModel(
     private val positionSourceRepository = PositionSourceRepositoryFactory.create(application)
     private val motionTrackingRepository = MotionTrackingRepositoryFactory.create(application)
     private val wifiRepository = WifiRepositoryFactory.create(application)
+    private val heatmapRenderer = HeatmapRenderer()
     private val sessionState = MutableStateFlow(ArRecordingSessionState())
 
     val uiState: StateFlow<ArMappingUiState> = combine(
@@ -533,20 +536,14 @@ class ArMappingViewModel(
         sample: LivePositionSample,
         completedAt: Long
     ): ArSampleMarkerUiState {
+        val bucket = heatmapRenderer.bucketForRssi(rssiDbm)
+        val presentation = heatmapRenderer.presentationFor(bucket)
         return ArSampleMarkerUiState(
             id = completedAt,
             xMeters = sample.xMeters,
             yMeters = sample.yMeters,
-            signalLabel = when {
-                rssiDbm >= -55 -> "Strong"
-                rssiDbm >= -67 -> "Medium"
-                else -> "Weak"
-            },
-            colorArgb = when {
-                rssiDbm >= -55 -> 0xFF2E7D32.toInt()
-                rssiDbm >= -67 -> 0xFFF9A825.toInt()
-                else -> 0xFFC62828.toInt()
-            }
+            signalLabel = "${presentation.label} (${presentation.rangeLabel})",
+            colorArgb = presentation.color.toArgb()
         )
     }
 }

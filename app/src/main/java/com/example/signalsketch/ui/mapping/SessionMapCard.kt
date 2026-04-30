@@ -373,7 +373,7 @@ fun SessionMapCard(
                     }
                     renderModel.wifiPoints.forEach { point ->
                         drawCircle(
-                            color = renderer.colorFor(point.bucket, colorScale),
+                            color = renderer.markerColorFor(point.bucket),
                             radius = 7f,
                             center = point.offset
                         )
@@ -473,7 +473,7 @@ fun SessionMapCard(
                     )
                 }
             }
-            SignalLegend(renderer = renderer, colorScale = colorScale)
+            SignalLegend(renderer = renderer)
         }
     }
 }
@@ -630,16 +630,22 @@ private fun MapProjection.deltaMeters(change: PointerInputChange): Offset {
 
 @Composable
 private fun SignalLegend(
-    renderer: HeatmapRenderer,
-    colorScale: ColorScalePreference
+    renderer: HeatmapRenderer
 ) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.WEAK, colorScale), label = "Weak")
-        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.MEDIUM, colorScale), label = "Medium")
-        LegendItem(color = renderer.colorFor(com.example.signalsketch.heatmap.SignalBucket.STRONG, colorScale), label = "Strong")
+        Text(
+            text = "Signal markers: less-negative dBm is stronger. Heatmap tint follows the selected palette.",
+            style = MaterialTheme.typography.bodySmall
+        )
+        val weak = renderer.presentationFor(com.example.signalsketch.heatmap.SignalBucket.WEAK)
+        val medium = renderer.presentationFor(com.example.signalsketch.heatmap.SignalBucket.MEDIUM)
+        val strong = renderer.presentationFor(com.example.signalsketch.heatmap.SignalBucket.STRONG)
+        LegendItem(color = weak.color, label = "${weak.label} ${weak.rangeLabel}")
+        LegendItem(color = medium.color, label = "${medium.label} ${medium.rangeLabel}")
+        LegendItem(color = strong.color, label = "${strong.label} ${strong.rangeLabel}")
     }
 }
 
@@ -648,7 +654,10 @@ private fun LegendItem(
     color: Color,
     label: String
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Canvas(modifier = Modifier.padding(top = 4.dp)) {
             drawCircle(color = color, radius = 8f, center = Offset(8f, 8f))
         }
