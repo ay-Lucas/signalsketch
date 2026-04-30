@@ -131,8 +131,26 @@ private fun ArMappingScreen(
     val cameraStream = rememberARCameraStream(materialLoader)
     val currentFrame = remember { mutableStateOf<Frame?>(null) }
     val anchorNodes = rememberNodes()
+    val pathMarkerNodes = rememberNodes()
     val wifiMarkerNodes = rememberNodes()
     var selectedBoxId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(state.pathSamples) {
+        pathMarkerNodes.clear()
+        state.pathSamples.forEachIndexed { index, sample ->
+            val isStart = index == 0
+            pathMarkerNodes += CylinderNode(
+                engine = engine,
+                radius = if (isStart) 0.05f else 0.03f,
+                height = 0.01f,
+                materialInstance = materialLoader.createColorInstance(
+                    color = if (isStart) Color(0xFF00E5FF) else Color(0xFFFFF9C4)
+                )
+            ).apply {
+                position = Float3(sample.xMeters, 0.005f, sample.yMeters)
+            }
+        }
+    }
 
     LaunchedEffect(state.liveSampleMarkers) {
         wifiMarkerNodes.clear()
@@ -151,6 +169,7 @@ private fun ArMappingScreen(
         if (!state.availability.canStartAr) {
             currentFrame.value = null
             anchorNodes.clear()
+            pathMarkerNodes.clear()
             wifiMarkerNodes.clear()
         }
     }
@@ -159,6 +178,7 @@ private fun ArMappingScreen(
         onDispose {
             currentFrame.value = null
             anchorNodes.clear()
+            pathMarkerNodes.clear()
             wifiMarkerNodes.clear()
             onScreenDisposed()
         }
@@ -179,7 +199,7 @@ private fun ArMappingScreen(
                         Config.DepthMode.DISABLED
                     }
                 },
-                childNodes = anchorNodes + wifiMarkerNodes,
+                childNodes = anchorNodes + pathMarkerNodes + wifiMarkerNodes,
                 onSessionCreated = { onSessionCreated() },
                 onSessionResumed = { onSessionResumed() },
                 onSessionPaused = { onSessionPaused() },
