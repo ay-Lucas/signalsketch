@@ -5,6 +5,7 @@ import android.app.Application
 import android.view.MotionEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.graphics.Color as AndroidColor
 import com.example.signalsketch.ar.ArAvailabilityRepositoryFactory
 import com.example.signalsketch.ar.ArAvailabilityState
 import com.example.signalsketch.ar.ArInstallState
@@ -12,6 +13,7 @@ import com.example.signalsketch.ar.ArSessionLifecycleState
 import com.example.signalsketch.ar.ArSessionState
 import com.example.signalsketch.ar.ArSupportState
 import com.example.signalsketch.ar.DefaultArSessionController
+import com.example.signalsketch.data.repo.RecordedFloorplanBoxPayload
 import com.example.signalsketch.data.repo.RecordedPathPointPayload
 import com.example.signalsketch.data.repo.RecordedSessionPayload
 import com.example.signalsketch.data.repo.RecordedWifiSamplePayload
@@ -53,6 +55,9 @@ data class ArMappingUiState(
     val lastErrorMessage: String? = null,
     val recordingSessionState: RecordingSessionState = RecordingSessionState.IDLE,
     val wifiSampleCount: Int = 0,
+    val pathSamples: List<RecordedPathSample> = emptyList(),
+    val wifiSamples: List<RecordedWifiSample> = emptyList(),
+    val floorplanBoxes: List<FloorplanRoomBox> = emptyList(),
     val liveSampleMarkers: List<ArSampleMarkerUiState> = emptyList(),
     val preferredPositionSource: PositionSourceType = PositionSourceType.NONE,
     val trackingQuality: TrackingQuality = TrackingQuality.UNAVAILABLE,
@@ -70,10 +75,14 @@ data class ArMappingUiState(
         get() = recordingSessionState == RecordingSessionState.PAUSED
 
     val canSaveSession: Boolean
-        get() = recordingSessionState != RecordingSessionState.IDLE && wifiSampleCount > 0
+        get() = recordingSessionState != RecordingSessionState.IDLE &&
+            (wifiSampleCount > 0 || pathSamples.isNotEmpty() || floorplanBoxes.isNotEmpty())
 
     val canResetSession: Boolean
-        get() = recordingSessionState != RecordingSessionState.IDLE || liveSampleMarkers.isNotEmpty()
+        get() = recordingSessionState != RecordingSessionState.IDLE ||
+            liveSampleMarkers.isNotEmpty() ||
+            pathSamples.isNotEmpty() ||
+            floorplanBoxes.isNotEmpty()
 }
 
 class ArMappingViewModel(
@@ -160,10 +169,85 @@ class ArMappingViewModel(
         wifiRepository.stopScan()
         viewModelScope.launch {
             scanSessionRepository.saveRecordedSession(persistedSession)
-            sessionState.value = ArRecordingSessionState(
-                statusMessage = when (persistedSession.status) {
-                    SavedSessionStatus.PAUSED -> "Paused AR mapping session saved."
-                    SavedSessionStatus.COMPLETED -> "Completed AR mapping session saved."
+            sessionState.update { current ->
+                current.copy(
+                    lifecycleState = RecordingSessionState.IDLE,
+                    statusMessage = when (persistedSession.status) {
+                        SavedSessionStatus.PAUSED -> "Paused AR mapping session saved."
+                        SavedSessionStatus.COMPLETED -> "Completed AR mapping session saved."
+                    }
+                )
+            }
+        }
+    }
+
+    fun addFloorplanBox(label: String) {
+        val normalized = label.trim().ifBlank { "Room ${sessionState.value.floorplanBoxes.size + 1}" }
+        sessionState.update { current ->
+            val centerX = current.pathSamples.lastOrNull()?.xMeters ?: 0f
+            val centerY = current.pathSamples.lastOrNull()?.yMeters ?: 0f
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes + FloorplanRoomBox(
+                    id = System.currentTimeMillis() + current.floorplanBoxes.size,
+                    label = normalized,
+                    centerXMeters = centerX,
+                    centerYMeters = centerY,
+                    widthMeters = 0.8f,
+                    heightMeters = 0.8f,
+                    colorArgb = roomBoxColorForIndex(current.nextFloorplanColorIndex)
+                ),
+                nextFloorplanColorIndex = current.nextFloorplanColorIndex + 1
+            )
+        }
+    }
+
+    fun updateFloorplanBoxLabel(boxId: Long, label: String) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) box.copy(label = label.trim().ifBlank { box.label }) else box
+                }
+            )
+        }
+    }
+
+    fun removeFloorplanBox(boxId: Long) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.filterNot { it.id == boxId }
+            )
+        }
+    }
+
+    fun updateFloorplanBoxWidth(boxId: Long, widthMeters: Float) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) box.copy(widthMeters = widthMeters.coerceAtLeast(0.05f)) else box
+                }
+            )
+        }
+    }
+
+    fun updateFloorplanBoxHeight(boxId: Long, heightMeters: Float) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) box.copy(heightMeters = heightMeters.coerceAtLeast(0.05f)) else box
+                }
+            )
+        }
+    }
+
+    fun updateFloorplanBoxPosition(boxId: Long, centerXMeters: Float, centerYMeters: Float) {
+        sessionState.update { current ->
+            current.copy(
+                floorplanBoxes = current.floorplanBoxes.map { box ->
+                    if (box.id == boxId) {
+                        box.copy(centerXMeters = centerXMeters, centerYMeters = centerYMeters)
+                    } else {
+                        box
+                    }
                 }
             )
         }
@@ -254,6 +338,11 @@ class ArMappingViewModel(
         motionTrackingRepository.close()
         wifiRepository.close()
         super.onCleared()
+    }
+
+    private fun roomBoxColorForIndex(index: Int): Int {
+        val hue = (index * 137.508f) % 360f
+        return AndroidColor.HSVToColor(floatArrayOf(hue, 0.6f, 0.95f))
     }
 
     private fun observeMotionSamples() {
@@ -389,6 +478,9 @@ class ArMappingViewModel(
             lastErrorMessage = session.lastErrorMessage,
             recordingSessionState = recordingState.lifecycleState,
             wifiSampleCount = recordingState.wifiSampleCount,
+            pathSamples = recordingState.pathSamples,
+            wifiSamples = recordingState.wifiSamples,
+            floorplanBoxes = recordingState.floorplanBoxes,
             liveSampleMarkers = recordingState.sampleMarkers,
             preferredPositionSource = positionSourceState.preferredSourceType,
             trackingQuality = positionSourceState.trackingQuality,
@@ -462,15 +554,17 @@ private data class ArRecordingSessionState(
     val wifiSampleCount: Int = 0,
     val pathSamples: List<RecordedPathSample> = emptyList(),
     val wifiSamples: List<RecordedWifiSample> = emptyList(),
+    val floorplanBoxes: List<FloorplanRoomBox> = emptyList(),
     val sampleMarkers: List<ArSampleMarkerUiState> = emptyList(),
     val lastRecordedWifiSnapshotAtEpochMillis: Long = 0,
     val lastRecordedPositionSequence: Long = 0,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val nextFloorplanColorIndex: Int = 0
 )
 
 private fun ArRecordingSessionState.toRecordedSessionPayload(): RecordedSessionPayload? {
     val sessionId = sessionId ?: return null
-    if (pathSamples.isEmpty() && wifiSamples.isEmpty()) {
+    if (pathSamples.isEmpty() && wifiSamples.isEmpty() && floorplanBoxes.isEmpty()) {
         return null
     }
 
@@ -503,6 +597,16 @@ private fun ArRecordingSessionState.toRecordedSessionPayload(): RecordedSessionP
                 yMeters = sample.yMeters,
                 headingDegrees = sample.headingDegrees,
                 pathPointIndex = sample.pathSampleIndex
+            )
+        },
+        floorplanBoxes = floorplanBoxes.map { box ->
+            RecordedFloorplanBoxPayload(
+                label = box.label,
+                centerXMeters = box.centerXMeters,
+                centerYMeters = box.centerYMeters,
+                widthMeters = box.widthMeters,
+                heightMeters = box.heightMeters,
+                colorArgb = box.colorArgb
             )
         }
     )

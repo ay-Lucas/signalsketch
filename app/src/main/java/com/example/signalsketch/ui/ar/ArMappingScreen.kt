@@ -26,10 +26,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.signalsketch.ui.mapping.FloorplanBuilderCard
+import com.example.signalsketch.ui.mapping.SessionMapCard
 import com.example.signalsketch.ui.theme.OnDark
 import com.example.signalsketch.ui.theme.SurfaceDark
 import com.example.signalsketch.position.PositionSourceType
@@ -85,6 +89,12 @@ fun ArMappingScreen(
         onResumeSession = viewModel::resumeSession,
         onSaveSession = viewModel::saveSession,
         onResetSession = viewModel::resetSession,
+        onAddFloorplanBox = viewModel::addFloorplanBox,
+        onUpdateFloorplanBoxLabel = viewModel::updateFloorplanBoxLabel,
+        onUpdateFloorplanBoxWidth = viewModel::updateFloorplanBoxWidth,
+        onUpdateFloorplanBoxHeight = viewModel::updateFloorplanBoxHeight,
+        onUpdateFloorplanBoxPosition = viewModel::updateFloorplanBoxPosition,
+        onRemoveFloorplanBox = viewModel::removeFloorplanBox,
         onOpenStandardMapping = onOpenStandardMapping
     )
 }
@@ -108,6 +118,12 @@ private fun ArMappingScreen(
     onResumeSession: () -> Unit,
     onSaveSession: () -> Unit,
     onResetSession: () -> Unit,
+    onAddFloorplanBox: (String) -> Unit,
+    onUpdateFloorplanBoxLabel: (Long, String) -> Unit,
+    onUpdateFloorplanBoxWidth: (Long, Float) -> Unit,
+    onUpdateFloorplanBoxHeight: (Long, Float) -> Unit,
+    onUpdateFloorplanBoxPosition: (Long, Float, Float) -> Unit,
+    onRemoveFloorplanBox: (Long) -> Unit,
     onOpenStandardMapping: () -> Unit = {}
 ) {
     val engine = rememberEngine()
@@ -116,6 +132,7 @@ private fun ArMappingScreen(
     val currentFrame = remember { mutableStateOf<Frame?>(null) }
     val anchorNodes = rememberNodes()
     val wifiMarkerNodes = rememberNodes()
+    var selectedBoxId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state.liveSampleMarkers) {
         wifiMarkerNodes.clear()
@@ -223,6 +240,31 @@ private fun ArMappingScreen(
                     wifiSampleCount = state.wifiSampleCount
                 )
             }
+            SessionMapCard(
+                pathSamples = state.pathSamples,
+                wifiSamples = state.wifiSamples,
+                roomBoxes = state.floorplanBoxes,
+                selectedRoomBoxId = selectedBoxId,
+                onSelectRoomBox = { selectedBoxId = it },
+                onMoveRoomBox = onUpdateFloorplanBoxPosition,
+                onResizeRoomBox = { boxId, widthMeters, heightMeters ->
+                    onUpdateFloorplanBoxWidth(boxId, widthMeters)
+                    onUpdateFloorplanBoxHeight(boxId, heightMeters)
+                },
+                emptyMessage = "Start an AR session to capture path samples, Wi-Fi samples, and floorplan boxes.",
+                title = "AR Floorplan Map",
+                description = "This 2D map mirrors the AR capture session so you can place and edit floorplan boxes while recording."
+            )
+            FloorplanBuilderCard(
+                boxes = state.floorplanBoxes,
+                selectedBoxId = selectedBoxId,
+                onAddBox = onAddFloorplanBox,
+                onUpdateBoxLabel = onUpdateFloorplanBoxLabel,
+                onSelectBox = { selectedBoxId = it },
+                onRemoveBox = onRemoveFloorplanBox,
+                title = "AR Floorplan Builder",
+                description = "Manage the same room boxes used by the live AR mapping session. Select a box on the map to move or resize it."
+            )
         }
     }
 }
