@@ -244,7 +244,8 @@ private fun SavedSessionDetailScreen(
                     pathSamples = uiState.pathSamples,
                     wifiSamples = uiState.wifiSamples,
                     roomBoxes = uiState.floorplanBoxes,
-                    emptyMessage = "This saved session does not include map samples."
+                    emptyMessage = "This saved session does not include map samples.",
+                    isInteractive = false
                 )
 
                 Button(

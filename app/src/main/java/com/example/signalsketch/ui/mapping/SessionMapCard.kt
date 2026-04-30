@@ -63,7 +63,8 @@ fun SessionMapCard(
     emptyMessage: String,
     modifier: Modifier = Modifier,
     title: String = "Map View",
-    description: String = "A simple grid heatmap is derived from Wi-Fi samples, while the original path and sample points stay visible."
+    description: String = "A simple grid heatmap is derived from Wi-Fi samples, while the original path and sample points stay visible.",
+    isInteractive: Boolean = true
 ) {
     val context = LocalContext.current
     val preferencesRepository = remember { DataStoreAppPreferencesRepository(context.appPreferencesDataStore) }
@@ -110,189 +111,195 @@ fun SessionMapCard(
                     .height(280.dp)
                     .background(Color(0xFF101010))
                     .onSizeChanged { canvasSize = it }
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            val firstDown = awaitPointerEvent().changes.firstOrNull { it.pressed }
-                                ?: return@awaitEachGesture
-                            if (canvasSize == IntSize.Zero) {
-                                return@awaitEachGesture
-                            }
+                    .then(
+                        if (isInteractive) {
+                            Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val firstDown = awaitPointerEvent().changes.firstOrNull { it.pressed }
+                                        ?: return@awaitEachGesture
+                                    if (canvasSize == IntSize.Zero) {
+                                        return@awaitEachGesture
+                                    }
 
-                            val currentPathSamples = pathSamplesState.value
-                            val currentWifiSamples = wifiSamplesState.value
-                            val currentRoomBoxes = roomBoxesState.value
-                            val currentSelectedRoomBoxId = selectedRoomBoxIdState.value
-                            val currentViewport = viewportState.value
-                            val projection = renderer.buildProjection(
-                                canvasSize = Size(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
-                                pathSamples = currentPathSamples,
-                                wifiSamples = currentWifiSamples,
-                                roomBoxes = currentRoomBoxes,
-                                viewport = currentViewport
-                            )
-                            val selectedBox = currentRoomBoxes.firstOrNull { it.id == currentSelectedRoomBoxId }
-                            val resizeHandle = selectedBox?.let { box ->
-                                hitTestRoomBoxHandle(
-                                    box = box,
-                                    projection = projection,
-                                    renderer = renderer,
-                                    point = firstDown.position
-                                )
-                            }
-                            val touchedBox = currentRoomBoxes.lastOrNull { box ->
-                                roomBoxScreenBounds(box, projection, renderer).contains(firstDown.position)
-                            }
-                            val interactionTarget = when {
-                                resizeHandle != null && selectedBox != null -> {
-                                    RoomBoxInteractionTarget.Resize(
-                                        boxId = selectedBox.id,
-                                        handle = resizeHandle,
-                                        fixedCorner = fixedCornerForHandle(selectedBox, resizeHandle)
+                                    val currentPathSamples = pathSamplesState.value
+                                    val currentWifiSamples = wifiSamplesState.value
+                                    val currentRoomBoxes = roomBoxesState.value
+                                    val currentSelectedRoomBoxId = selectedRoomBoxIdState.value
+                                    val currentViewport = viewportState.value
+                                    val projection = renderer.buildProjection(
+                                        canvasSize = Size(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
+                                        pathSamples = currentPathSamples,
+                                        wifiSamples = currentWifiSamples,
+                                        roomBoxes = currentRoomBoxes,
+                                        viewport = currentViewport
                                     )
-                                }
-
-                                touchedBox != null -> RoomBoxInteractionTarget.Move(
-                                    boxId = touchedBox.id,
-                                    centerXMeters = touchedBox.centerXMeters,
-                                    centerYMeters = touchedBox.centerYMeters
-                                )
-
-                                else -> RoomBoxInteractionTarget.MapPan
-                            }
-                            var didDrag = false
-                            var gestureViewport = currentViewport
-
-                            if (interactionTarget is RoomBoxInteractionTarget.Move) {
-                                onSelectRoomBoxState.value(interactionTarget.boxId)
-                            }
-
-                            do {
-                                val event = awaitPointerEvent()
-                                val pressedChanges = event.changes.filter { it.pressed }
-                                if (pressedChanges.isEmpty()) {
-                                    break
-                                }
-
-                                val gestureProjection = renderer.buildProjection(
-                                    canvasSize = Size(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
-                                    pathSamples = currentPathSamples,
-                                    wifiSamples = currentWifiSamples,
-                                    roomBoxes = currentRoomBoxes,
-                                    viewport = gestureViewport
-                                )
-
-                                if (pressedChanges.size > 1) {
-                                    val centroid = event.calculateCentroid(useCurrent = true)
-                                    val pan = event.calculatePan()
-                                    val zoom = event.calculateZoom()
-                                    if (pan != Offset.Zero || zoom != 1f) {
-                                        didDrag = true
-                                        val zoomedViewport = gestureViewport.copy(
-                                            scale = (gestureViewport.scale * zoom).coerceIn(0.2f, 6f),
-                                            offsetX = gestureViewport.offsetX + pan.x,
-                                            offsetY = gestureViewport.offsetY + pan.y
+                                    val selectedBox = currentRoomBoxes.firstOrNull { it.id == currentSelectedRoomBoxId }
+                                    val resizeHandle = selectedBox?.let { box ->
+                                        hitTestRoomBoxHandle(
+                                            box = box,
+                                            projection = projection,
+                                            renderer = renderer,
+                                            point = firstDown.position
                                         )
-                                        val worldPointAtCentroid = renderer.unprojectPoint(
-                                            point = centroid,
-                                            projection = gestureProjection
+                                    }
+                                    val touchedBox = currentRoomBoxes.lastOrNull { box ->
+                                        roomBoxScreenBounds(box, projection, renderer).contains(firstDown.position)
+                                    }
+                                    val interactionTarget = when {
+                                        resizeHandle != null && selectedBox != null -> {
+                                            RoomBoxInteractionTarget.Resize(
+                                                boxId = selectedBox.id,
+                                                handle = resizeHandle,
+                                                fixedCorner = fixedCornerForHandle(selectedBox, resizeHandle)
+                                            )
+                                        }
+
+                                        touchedBox != null -> RoomBoxInteractionTarget.Move(
+                                            boxId = touchedBox.id,
+                                            centerXMeters = touchedBox.centerXMeters,
+                                            centerYMeters = touchedBox.centerYMeters
                                         )
-                                        val zoomedProjection = renderer.buildProjection(
+
+                                        else -> RoomBoxInteractionTarget.MapPan
+                                    }
+                                    var didDrag = false
+                                    var gestureViewport = currentViewport
+
+                                    if (interactionTarget is RoomBoxInteractionTarget.Move) {
+                                        onSelectRoomBoxState.value(interactionTarget.boxId)
+                                    }
+
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val pressedChanges = event.changes.filter { it.pressed }
+                                        if (pressedChanges.isEmpty()) {
+                                            break
+                                        }
+
+                                        val gestureProjection = renderer.buildProjection(
                                             canvasSize = Size(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
                                             pathSamples = currentPathSamples,
                                             wifiSamples = currentWifiSamples,
                                             roomBoxes = currentRoomBoxes,
-                                            viewport = zoomedViewport
+                                            viewport = gestureViewport
                                         )
-                                        val anchoredPoint = renderer.projectPoint(
-                                            xMeters = worldPointAtCentroid.x,
-                                            yMeters = worldPointAtCentroid.y,
-                                            projection = zoomedProjection
-                                        )
-                                        gestureViewport = zoomedViewport.copy(
-                                            offsetX = zoomedViewport.offsetX + (centroid.x - anchoredPoint.x),
-                                            offsetY = zoomedViewport.offsetY + (centroid.y - anchoredPoint.y)
-                                        )
-                                        viewport = gestureViewport
-                                    }
-                                } else {
-                                    when (interactionTarget) {
-                                        is RoomBoxInteractionTarget.Move -> {
-                                            val change = pressedChanges.first()
-                                            val delta = gestureProjection.deltaMeters(change)
-                                            if (delta != Offset.Zero) {
-                                                didDrag = true
-                                                interactionTarget.centerXMeters += delta.x
-                                                interactionTarget.centerYMeters += delta.y
-                                                onMoveRoomBoxState.value(
-                                                    interactionTarget.boxId,
-                                                    interactionTarget.centerXMeters,
-                                                    interactionTarget.centerYMeters
-                                                )
-                                            }
-                                        }
 
-                                        is RoomBoxInteractionTarget.Resize -> {
-                                            val change = pressedChanges.first()
-                                            val dragged = renderer.unprojectPoint(change.position, gestureProjection)
-                                            val resized = resizeBoxFromHandle(
-                                                draggedPoint = dragged,
-                                                fixedCorner = interactionTarget.fixedCorner,
-                                                handle = interactionTarget.handle
-                                            )
-                                            if (resized != null) {
+                                        if (pressedChanges.size > 1) {
+                                            val centroid = event.calculateCentroid(useCurrent = true)
+                                            val pan = event.calculatePan()
+                                            val zoom = event.calculateZoom()
+                                            if (pan != Offset.Zero || zoom != 1f) {
                                                 didDrag = true
-                                                onMoveRoomBoxState.value(
-                                                    interactionTarget.boxId,
-                                                    resized.centerX,
-                                                    resized.centerY
+                                                val zoomedViewport = gestureViewport.copy(
+                                                    scale = (gestureViewport.scale * zoom).coerceIn(0.2f, 6f),
+                                                    offsetX = gestureViewport.offsetX + pan.x,
+                                                    offsetY = gestureViewport.offsetY + pan.y
                                                 )
-                                                onResizeRoomBoxState.value(
-                                                    interactionTarget.boxId,
-                                                    resized.width,
-                                                    resized.height
+                                                val worldPointAtCentroid = renderer.unprojectPoint(
+                                                    point = centroid,
+                                                    projection = gestureProjection
                                                 )
-                                            }
-                                        }
-
-                                        RoomBoxInteractionTarget.MapPan -> {
-                                            val change = pressedChanges.first()
-                                            val delta = change.position - change.previousPosition
-                                            if (delta != Offset.Zero) {
-                                                didDrag = true
-                                                gestureViewport = gestureViewport.copy(
-                                                    offsetX = gestureViewport.offsetX + delta.x,
-                                                    offsetY = gestureViewport.offsetY + delta.y
+                                                val zoomedProjection = renderer.buildProjection(
+                                                    canvasSize = Size(canvasSize.width.toFloat(), canvasSize.height.toFloat()),
+                                                    pathSamples = currentPathSamples,
+                                                    wifiSamples = currentWifiSamples,
+                                                    roomBoxes = currentRoomBoxes,
+                                                    viewport = zoomedViewport
+                                                )
+                                                val anchoredPoint = renderer.projectPoint(
+                                                    xMeters = worldPointAtCentroid.x,
+                                                    yMeters = worldPointAtCentroid.y,
+                                                    projection = zoomedProjection
+                                                )
+                                                gestureViewport = zoomedViewport.copy(
+                                                    offsetX = zoomedViewport.offsetX + (centroid.x - anchoredPoint.x),
+                                                    offsetY = zoomedViewport.offsetY + (centroid.y - anchoredPoint.y)
                                                 )
                                                 viewport = gestureViewport
                                             }
+                                        } else {
+                                            when (interactionTarget) {
+                                                is RoomBoxInteractionTarget.Move -> {
+                                                    val change = pressedChanges.first()
+                                                    val delta = gestureProjection.deltaMeters(change)
+                                                    if (delta != Offset.Zero) {
+                                                        didDrag = true
+                                                        interactionTarget.centerXMeters += delta.x
+                                                        interactionTarget.centerYMeters += delta.y
+                                                        onMoveRoomBoxState.value(
+                                                            interactionTarget.boxId,
+                                                            interactionTarget.centerXMeters,
+                                                            interactionTarget.centerYMeters
+                                                        )
+                                                    }
+                                                }
+
+                                                is RoomBoxInteractionTarget.Resize -> {
+                                                    val change = pressedChanges.first()
+                                                    val dragged = renderer.unprojectPoint(change.position, gestureProjection)
+                                                    val resized = resizeBoxFromHandle(
+                                                        draggedPoint = dragged,
+                                                        fixedCorner = interactionTarget.fixedCorner,
+                                                        handle = interactionTarget.handle
+                                                    )
+                                                    if (resized != null) {
+                                                        didDrag = true
+                                                        onMoveRoomBoxState.value(
+                                                            interactionTarget.boxId,
+                                                            resized.centerX,
+                                                            resized.centerY
+                                                        )
+                                                        onResizeRoomBoxState.value(
+                                                            interactionTarget.boxId,
+                                                            resized.width,
+                                                            resized.height
+                                                        )
+                                                    }
+                                                }
+
+                                                RoomBoxInteractionTarget.MapPan -> {
+                                                    val change = pressedChanges.first()
+                                                    val delta = change.position - change.previousPosition
+                                                    if (delta != Offset.Zero) {
+                                                        didDrag = true
+                                                        gestureViewport = gestureViewport.copy(
+                                                            offsetX = gestureViewport.offsetX + delta.x,
+                                                            offsetY = gestureViewport.offsetY + delta.y
+                                                        )
+                                                        viewport = gestureViewport
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        event.changes.forEach { change ->
+                                            if (change.position != change.previousPosition) {
+                                                change.consume()
+                                            }
+                                        }
+                                    } while (true)
+
+                                    if (!didDrag) {
+                                        when {
+                                            resizeHandle != null && selectedBox != null -> {
+                                                onSelectRoomBoxState.value(selectedBox.id)
+                                            }
+
+                                            touchedBox != null -> {
+                                                onSelectRoomBoxState.value(touchedBox.id)
+                                            }
+
+                                            else -> {
+                                                onSelectRoomBoxState.value(null)
+                                            }
                                         }
                                     }
                                 }
-
-                                event.changes.forEach { change ->
-                                    if (change.position != change.previousPosition) {
-                                        change.consume()
-                                    }
-                                }
-                            } while (true)
-
-                            if (!didDrag) {
-                                when {
-                                    resizeHandle != null && selectedBox != null -> {
-                                        onSelectRoomBoxState.value(selectedBox.id)
-                                    }
-
-                                    touchedBox != null -> {
-                                        onSelectRoomBoxState.value(touchedBox.id)
-                                    }
-
-                                    else -> {
-                                        onSelectRoomBoxState.value(null)
-                                    }
-                                }
                             }
+                        } else {
+                            Modifier
                         }
-                    }
+                    )
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val renderModel = renderer.buildRenderModel(
@@ -346,6 +353,24 @@ fun SessionMapCard(
                             center = point
                         )
                     }
+                    renderModel.path.firstOrNull()?.let { origin ->
+                        drawCircle(
+                            color = Color(0xFF00E5FF),
+                            radius = 11f,
+                            center = origin
+                        )
+                        drawCircle(
+                            color = Color(0xFF101010),
+                            radius = 5f,
+                            center = origin
+                        )
+                        drawCircle(
+                            color = Color.White,
+                            radius = 14f,
+                            center = origin,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f)
+                        )
+                    }
                     renderModel.wifiPoints.forEach { point ->
                         drawCircle(
                             color = renderer.colorFor(point.bucket, colorScale),
@@ -359,6 +384,19 @@ fun SessionMapCard(
                         textSize = 28f
                         isAntiAlias = true
                         typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+                    }
+                    val startLabelPaint = android.graphics.Paint(labelPaint).apply {
+                        color = android.graphics.Color.CYAN
+                        textSize = 30f
+                    }
+
+                    renderModel.path.firstOrNull()?.let { origin ->
+                        drawContext.canvas.nativeCanvas.drawText(
+                            "START",
+                            origin.x + 18f,
+                            origin.y - 18f,
+                            startLabelPaint
+                        )
                     }
 
                     roomBoxes.forEach { box ->

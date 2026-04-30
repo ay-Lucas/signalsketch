@@ -75,8 +75,10 @@ data class ArMappingUiState(
         get() = recordingSessionState == RecordingSessionState.PAUSED
 
     val canSaveSession: Boolean
-        get() = recordingSessionState != RecordingSessionState.IDLE &&
-            (wifiSampleCount > 0 || pathSamples.isNotEmpty() || floorplanBoxes.isNotEmpty())
+        get() = recordingSessionState != RecordingSessionState.IDLE ||
+            wifiSampleCount > 0 ||
+            pathSamples.isNotEmpty() ||
+            floorplanBoxes.isNotEmpty()
 
     val canResetSession: Boolean
         get() = recordingSessionState != RecordingSessionState.IDLE ||
@@ -168,10 +170,11 @@ class ArMappingViewModel(
         motionTrackingRepository.stopTracking()
         wifiRepository.stopScan()
         viewModelScope.launch {
-            scanSessionRepository.saveRecordedSession(persistedSession)
+            val savedSessionId = scanSessionRepository.saveRecordedSession(persistedSession)
             sessionState.update { current ->
                 current.copy(
                     lifecycleState = RecordingSessionState.IDLE,
+                    savedSessionRecordId = savedSessionId,
                     statusMessage = when (persistedSession.status) {
                         SavedSessionStatus.PAUSED -> "Paused AR mapping session saved."
                         SavedSessionStatus.COMPLETED -> "Completed AR mapping session saved."
@@ -559,23 +562,25 @@ private data class ArRecordingSessionState(
     val lastRecordedWifiSnapshotAtEpochMillis: Long = 0,
     val lastRecordedPositionSequence: Long = 0,
     val statusMessage: String? = null,
-    val nextFloorplanColorIndex: Int = 0
+    val nextFloorplanColorIndex: Int = 0,
+    val savedSessionRecordId: Long? = null
 )
 
 private fun ArRecordingSessionState.toRecordedSessionPayload(): RecordedSessionPayload? {
-    val sessionId = sessionId ?: return null
+    val resolvedSessionId = sessionId ?: savedSessionRecordId ?: System.currentTimeMillis()
     if (pathSamples.isEmpty() && wifiSamples.isEmpty() && floorplanBoxes.isEmpty()) {
         return null
     }
 
     return RecordedSessionPayload(
-        name = "AR Mapping Session $sessionId",
-        startedAtEpochMillis = sessionId,
+        existingSessionId = savedSessionRecordId,
+        name = "AR Mapping Session $resolvedSessionId",
+        startedAtEpochMillis = sessionId ?: resolvedSessionId,
         endedAtEpochMillis = if (lifecycleState == RecordingSessionState.PAUSED) null else System.currentTimeMillis(),
         status = when (lifecycleState) {
             RecordingSessionState.PAUSED -> SavedSessionStatus.PAUSED
             RecordingSessionState.ACTIVE -> SavedSessionStatus.COMPLETED
-            RecordingSessionState.IDLE -> return null
+            RecordingSessionState.IDLE -> SavedSessionStatus.COMPLETED
         },
         notes = "Source: AR mapping",
         pathPoints = pathSamples.map { sample ->
